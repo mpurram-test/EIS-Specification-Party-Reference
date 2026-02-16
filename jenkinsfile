@@ -1,0 +1,176 @@
+pipeline {
+  agent any
+  options { timestamps() }
+
+  environment {
+    TF_INPUT         = 'false'
+    TF_IN_AUTOMATION = 'true'
+
+    // Non-secret Azure names, stored as credentials for central config
+    RESOURCE_GROUP_NAME_CRED = credentials('stage-apim-rg-name')
+    APIM_NAME_CRED           = credentials('stage-apim-apim-name')
+
+    // Container registry details (update these)
+    REGISTRY_URL  = 'myregistry.azurecr.io'   // <-- change to your ACR/DockerHub hostname
+    IMAGE_REPO    = 'apim-bundles'            // <-- change to your repo name
+
+    // Helper for immutable image tagging
+    SHORT_SHA = sh(returnStdout: true, script: 'git rev-parse --short HEAD || echo dev').trim()
+  }
+
+  stages {
+    stage('Pull Source Control (dev only)') {
+      when { branch 'dev' }
+      steps {
+        checkout scm
+        sh 'echo "Repo root:" && ls -la'
+        sh 'echo "\\nAPI dir:" && ls -la api || { echo "WARNING: api/ not found"; true; }'
+      }
+    }
+
+    stage('Bundle OpenAPI (multi-API)') {
+      when { branch 'dev' }
+      steps {
+        sh '''
+          set -e
+          mkdir -p build/api-bundled
+
+          # Only versioned files like "* v1.yaml", "* v2.yaml", etc.; skip *Definitions*
+          for f in api/*\\ v*.yaml; do
+            [ -f "$f" ] || continue
+            base="$(basename "$f")"
+            case "$base" in
+              *Definitions* ) echo "Skipping definitions file: $f"; continue ;;
+            esac
+
+            echo "Bundling $f"
+            if command -v node >/dev/null 2>&1; then
+              npx -y @redocly/cli@latest bundle "$f" --ext yaml -o "build/api-bundled/$base"
+            elif command -v docker >/dev/null 2>&1; then
+              docker run --rm -v "$PWD":/spec redocly/cli bundle "$f" --ext yaml -o "build/api-bundled/$base"
+            else
+              echo "ERROR: Need Node or Docker to run Redocly CLI." >&2
+              exit 1
+            fi
+          done
+
+          echo "Bundled files:"
+          ls -la build/api-bundled || true
+        '''
+      }
+    }
+
+    stage('Redocly Lint (bundled - fail on errors)') {
+      when { branch 'dev' }
+      steps {
+        script {
+          if (sh(script: 'ls build/api-bundled/*\\ v*.yaml >/dev/null 2>&1', returnStatus: true) != 0) {
+            error "No bundled versioned specs found. Aborting."
+          }
+          def cmdNPX    = 'npx -y @redocly/cli@latest lint "build/api-bundled/* v*.yaml"'
+          def cmdDocker = 'docker run --rm -v "$PWD":/spec redocly/cli lint "build/api-bundled/* v*.yaml"'
+          if (sh(script: 'command -v node >/dev/null 2>&1', returnStatus: true) == 0) { sh cmdNPX }
+          else if (sh(script: 'command -v docker >/dev/null 2>&1', returnStatus: true) == 0) { sh cmdDocker }
+          else { error "Neither Node nor Docker found for Redocly CLI." }
+        }
+      }
+    }
+
+    stage('Build & Push Bundle Image (Dev)') {
+      when { branch 'dev' }
+      steps {
+        withCredentials([usernamePassword(
+          credentialsId: 'docker-registry',
+          usernameVariable: 'REG_USER',
+          passwordVariable: 'REG_PASS'
+        )]) {
+          sh '''
+            set -e
+            echo "Preparing Dockerfile for bundle image..."
+            cat > Dockerfile.bundle <<'EOF'
+FROM nginx:alpine
+# Serve bundled specs under /specs
+COPY build/api-bundled/ /usr/share/nginx/html/specs/
+RUN printf '<html><body><h3>Bundled Specs</h3><ul>' > /usr/share/nginx/html/index.html && \
+    for f in /usr/share/nginx/html/specs/*; do b=$(basename "$f"); echo "<li><a href=\\"/specs/$b\\">$b</a></li>"; done >> /usr/share/nginx/html/index.html && \
+    printf '</ul></body></html>' >> /usr/share/nginx/html/index.html
+EOF
+
+            echo "$REG_PASS" | docker login ${REGISTRY_URL} -u "$REG_USER" --password-stdin
+
+            IMAGE_TAG="${REGISTRY_URL}/${IMAGE_REPO}:${BUILD_NUMBER}-${SHORT_SHA}-dev"
+            echo "Building and pushing image: $IMAGE_TAG"
+
+            docker build -f Dockerfile.bundle -t "$IMAGE_TAG" .
+            docker tag "$IMAGE_TAG" ${REGISTRY_URL}/${IMAGE_REPO}:latest-dev || true
+            docker push "$IMAGE_TAG"
+            docker push ${REGISTRY_URL}/${IMAGE_REPO}:latest-dev || true
+
+            mkdir -p build
+            echo "IMAGE_TAG=$IMAGE_TAG" > build/image_tag.env
+          '''
+        }
+      }
+      post {
+        always { archiveArtifacts artifacts: 'Dockerfile.bundle, build/image_tag.env', fingerprint: true }
+      }
+    }
+
+    stage('Terraform Init/Validate') {
+      when { branch 'dev' }
+      steps {
+        sh '''
+          set -e
+          terraform init -input=false
+          terraform fmt -check
+          terraform validate
+        '''
+      }
+    }
+
+    stage('Terraform Plan (Dev)') {
+      when { branch 'dev' }
+      steps {
+        withCredentials([
+          string(credentialsId: 'stage-apim-azure-subscription-id', variable: 'ARM_SUBSCRIPTION_ID'),
+          string(credentialsId: 'stage-apim-azure-client',          variable: 'ARM_CLIENT_ID'),
+          string(credentialsId: 'stage-apim-azure-secret',          variable: 'ARM_CLIENT_SECRET'),
+          string(credentialsId: 'stage-apim-azure-tenant',          variable: 'ARM_TENANT_ID')
+        ]) {
+          sh '''
+            set -e
+            IMAGE_TAG=$(sed -n 's/^IMAGE_TAG=//p' build/image_tag.env)
+            terraform plan -input=false \
+              -var="resource_group_name=${RESOURCE_GROUP_NAME_CRED}" \
+              -var="api_management_name=${APIM_NAME_CRED}" \
+              -var="spec_folder=${WORKSPACE}/build/api-bundled" \
+              -var="bundle_image=${IMAGE_TAG}" \
+              -out=tfplan.dev.out
+          '''
+        }
+      }
+      post {
+        always { archiveArtifacts artifacts: 'tfplan.dev.out', fingerprint: true }
+      }
+    }
+
+    stage('Terraform Apply (Dev)') {
+      when { branch 'dev' }
+      steps {
+        sh 'terraform apply -input=false -auto-approve tfplan.dev.out'
+      }
+    }
+
+    stage('Dev Post-Deploy Smoke (optional)') {
+      when { branch 'dev' }
+      steps {
+        echo 'Optionally: call APIM management API to list APIs and ensure the expected set is present.'
+      }
+    }
+  }
+
+  post {
+    success { echo "Dev deployment successful. Build: ${BUILD_URL}" }
+    failure { echo "Build failed: ${BUILD_URL}" }
+  }
+}

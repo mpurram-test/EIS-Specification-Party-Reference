@@ -1,0 +1,3181 @@
+components:
+  securitySchemes:
+    OAuth2:
+      type: oauth2
+      description: Seacoast OAuth 2.0 client credential code flow
+      flows:
+        clientCredentials:
+          tokenUrl: https://api.dev.seacoastbank.com/auth/v1/token
+  parameters:
+    systemIdentifier:
+      name: systemIdentifier
+      required: true
+      in: header
+      description: 'The Calling Application Mnemonic (i.e. IVR, QFD).'
+      example: IVR
+      schema:
+        type: string
+        minLength: 3
+        maxLength: 3
+    uuid:
+      name: uuid
+      required: true
+      in: header
+      description: >-
+        The request identifier or UUID can be any alphanumeric string with a max length of 50
+        characters. It must be a unique identifier that is generated for each API
+        request and should not be duplicated or repeated for subsequent calls. If a transaction fails and the consumer is attempting to retry the failed transaction (with the same request payload), it is expected that the UUID would be the same.
+      example: "123e4567-e89b-12d3-a456-426614174000"
+      schema:
+        type: string
+    requestDateTime:
+      name: requestDateTime
+      required: true
+      in: header
+      description: >-
+        Date/Time the calling application/consumer (systemIdentifier) invoked this API in UTC format (Coordinated Universal Time), CCYY-MM-DDThh:mm:ss.sssZ or CCYY-MM-DDThh:mm:ssZ, unless an alternate time zone is requested by supplying requestTimeZone. 
+      example: '2020-03-14T23:59:59.001Z'
+      schema:
+        type: string
+        format: date-time
+    agentIdentifier:
+      name: agentIdentifier
+      required: true
+      in: header
+      description: >-
+        The agent identifier identifies the user who invoked the call. Guidelines 
+        for populating are as follows: 1) If the API call originates as a result
+        of an action from by an user, from a user-interface (UI) or otherwise, then the
+        application can provide the individual’s user identifier 2) If the API call is
+        originated by a batch program then the application can send the name of
+        the program.
+      example: PL00000
+      schema:
+        type: string
+    requestTimeZone:
+      name: requestTimeZone
+      required: false
+      in: header
+      description: >-
+        Optional attribute that accepts and returns date/time in the requested time zone format. If no value is supplied, then all date/time attributes are accepted in UTC format (Coordinated Universal Time) using either the CCYY-MM-DDThh:mm:ss.sssZ or CCYY-MM-DDThh:mm:ssZ format, and are returned in UTC format, CCYY-MM-DDThh:mm:ss.sssZ. For instance, if "America/New_York" is supplied, then all date/time attributes are accepted in CCYY-MM-DDThh:mm:ss.sss or CCYY-MM-DDThh:mm:ss format and returned in CCYY-MM-DDThh:mm:ss.sss format. The time zone is assumed as EST in the winter and EDT in the summer. 
+
+        The valid values are available from the retrievePersonControls API, timeZoneValidValues[].timeZone. 
+      example: America/New_York
+      schema:
+        type: string
+    subscriptionKey:
+      name: subscriptionKey
+      required: true
+      in: header
+      description: >-
+         The subscription key is a unique, auto-generated access code used to control and track access to published APIs. It acts as a primary security mechanism to ensure that only authorized client applications can call the services/APIs via the API Management gateway. The subscription key functions similarly to a password or an API key but is often tied to a specific "subscription" plan, which defines the level of access, usage limits (rate limits), and associated billing information. 
+      example: "{{subscriptionKey}}"
+      schema:
+        type: string
+    searchType:
+      name: searchType
+      required: false
+      in: query
+      description: >-
+        The type of search to be performed, partial or full. If PARTIAL is requested, a partial match of search criteria will return the party. If FULL is requested, the whole keyword must match the search criteria to return the customer. 
+        
+        
+        PARTIAL: Returns results where the party attribute starts with or contains the search criteria. For example, searching for a postalCode of "338" returns all parties with postal codes beginning with "338" (e.g., 33801, 33813). Searching for addressLine1 of "LAKE" returns all parties with street name within the address line 1 containing "LAKE" (e.g., 98 LAKE BYRD BLVD, 2851 S LAKE LETTA DR, 947 LAKE ANGELO DR, 2720 LAKEVIEW DR). Searching for city of "LAKE" returns all parties with city names beginning with "LAKE" (e.g. LAKE GENEVA, LAKE PARK, LAKE PLACID). Partial matching applies to:
+        
+          * addressLine1
+          * postalAddressCity
+          * postalCode
+          * firstName
+          * organizationName
+
+        When searching for a person (partyType = "PERSON"), the person is returned if the first name begins with the value supplied for firstName and the last name is an exact match. For instance, if the firstName is "JOE" and lastName is "SMITH", then both JOEL SMITH and JOE SMITH are returned in the response. However, the party with first name JOE and last name SMITHSON would not be returned, since the last name must be an exact match regardless of the searchType. When searching for an organization (partyType = "ORGANIZATION"), the organization is returned if the organization name begins with the value supplied for organizationName. For instance, if searching with organizationName of "SMITH", then all organizations that begin with SMITH are returned (e.g., SMITH AUTO LLC, SMITH CAR WASH LLC, SMITH ENTERPRISES, SMITH LAWN SERVICE). The postalAddressStateProvince must be an exact match regardess of the partyType. 
+
+        
+        FULL: Returns results only when the keyword is an exact match for the party data.
+        
+        
+        The valid values are available from the retrievePersonControls API, searchTypeValidValues[].searchType. 
+        
+        
+        The search type qualifier is not applicable when searching with tax identifier (taxIdentifier).
+      example: "PARTIAL"
+      schema:
+        type: string
+        enum:
+          - PARTIAL
+          - FULL
+    customerRelationshipTypeFilter:
+      name: customerRelationshipTypeFilter
+      required: false
+      in: query
+      description: >-
+        Filter the parties by the status of the customer relationship. The valid values are available from the retrievePersonControls API, customerRelationshipTypeFilterValidValues[].customerRelationshipTypeFilter. 
+      example: "CUSTOMERS_ONLY"
+      schema:
+        type: string
+        enum:
+          - ALL
+          - CUSTOMERS_ONLY
+          - CUSTOMERS_AND_PROSPECTS
+          - EXTERNAL_CONTACTS_ONLY
+          - PROSPECTS_ONLY
+    validationOperation:
+      name: validationOperation
+      required: false
+      in: query
+      description: >-
+        The validation operation indicates whether the validations are performed in the context of party creation (CREATE), maintenance (UPDATE), search (SEARCH), or retrieve (RETRIEVE). If validation operation is performed in another context, do not provide the attribute as input. 
+      example: "CREATE"
+      schema:
+        type: string
+        enum:
+          - CREATE
+          - UPDATE
+          - SEARCH
+          - RETRIEVE
+    personControlValidationOperation:
+      name: validationOperation
+      required: false
+      in: query
+      description: >-
+        The validation operation provides the context and use of the control data. By providing the context (validationOperation), only the control data that is specific to the context is returned, in order to avoid returning control data that is not being used in the particular context, thus improving performance of the APIs.  
+        
+        
+        The validation operation indicates whether the validations are performed in the context of validating the person for creation (VALIDATE_CREATE), validating the person for maintenance (VALIDATE_UPDATE), or validating the party for retrieval (VALIDATE_RETRIEVE). All control data leveraged in the context of validating the payload (i.e. all validationOperation values beginning with VALIDATE_) are performed from the validatePerson API. Additionally, any control data required for validation rules that are specific to searching parties and not performed within the validatePerson API are returned when the validation operation is SEARCH (e.g. searchTypeValidValues, customerRelationshipTypeFilterValidValues, taxIdentifierType, stateProvinceValidValues). If the validation operation is not supplied as input, then all the control data is returned.  
+      example: "VALIDATE_RETRIEVE"
+      schema:
+        type: string
+        enum:
+          - VALIDATE_CREATE
+          - VALIDATE_UPDATE
+          - VALIDATE_RETRIEVE
+          - SEARCH
+    organizationControlValidationOperation:
+      name: validationOperation
+      required: false
+      in: query
+      description: >-
+        The validation operation provides the context and use of the control data. By providing the context (validationOperation), only the control data that is specific to the context is returned, in order to avoid returning control data that is not being used in the particular context, thus improving performance of the APIs.  
+        
+        
+        The validation operation indicates whether the validations are performed in the context of validating the organization for creation (VALIDATE_CREATE), validating the organization for maintenance (VALIDATE_UPDATE), or validating the party for retrieval (VALIDATE_RETRIEVE). All control data leveraged in the context of validating the payload (i.e. all validationOperation values beginning with VALIDATE_) are performed from the validateOrganization API. Additionally, any control data required for validation rules that are specific to searching parties and not performed within the validateOrganization API are returned when the validation operation is SEARCH (e.g. searchTypeValidValues, customerRelationshipTypeFilterValidValues, taxIdentifierType, stateProvinceValidValues). If the validation operation is not supplied as input, then all the control data is returned.  
+      example: "VALIDATE_RETRIEVE"
+      schema:
+        type: string
+        enum:
+          - VALIDATE_CREATE
+          - VALIDATE_UPDATE
+          - VALIDATE_RETRIEVE
+          - SEARCH
+    suppressValidationsIndicator:
+      name: suppressValidationsIndicator
+      required: false
+      in: header
+      description: >-
+        If the suppress validations indicator is set to true, then certain
+        validations will not be performed, provided that the API is executing in
+        a non-production environment. If the API is executing in a production
+        environment, suppression of validations will NOT be honored. If
+        suppressValidationsIndicator = true and API is executing in a
+        non-production environment, the following validations will not be
+        applied: Social Security Number Format Validation. The capability to
+        suppress the SSN format validation is required in the context of
+        performing real-time account opening of Choice Home Equity Line of
+        Credit accounts because the social security number (SSN) format
+        validation conflicts with the empower vendor system, which does not
+        permit valid SSNs in non-production environments. 
+      example: false
+      schema:
+        type: boolean
+        nullable: false
+    retrievePartyToPartyRelationshipPaginationToken:
+      name: paginationToken
+      in: header
+      description: >-
+        If no value is supplied, then the first set of related parties (up to
+        the currentRecordLimit) will be returned. If additional
+        related parties are being requested, then populate the pagination token
+        with the token returned during the previous request. For instance, the
+        first request returns 50 related parties along with a pagination token
+        in the response. The token returned in the response is supplied as input
+        for the second request, thus returning related parties 51 to 100, along
+        with an updated token that can be supplied to return related parties 101
+        to 150.
+      required: false
+      example: 50
+      schema:
+        type: string
+    searchPartiesPaginationToken:
+      name: paginationToken
+      in: header
+      description: >-
+        If no value is supplied, then the first set of matching parties (up to the current record limit of 25) will be returned. If additional matching parties are being requested, then populate the pagination token with the token returned during the previous request. For instance, the first request returns 25 matching parties along with a pagination token in the response. The token returned in the response is supplied as input for the second request, thus returning matching parties 26 to 50, along with an updated token that can be supplied to return matching parties 51
+        to 75.
+      required: false
+      example: "Y|||||P|00000028114|SMITH||"
+      schema:
+        type: string
+    searchPartiesByTaxIdentifierPaginationToken:
+      name: paginationToken
+      in: header
+      description: >-
+        If no value is supplied, then the first set of matching parties (up to the current record limit of 25) will be returned. If additional matching parties are being requested, then populate the pagination token with the token returned during the previous request. For instance, the first request returns 25 matching parties along with a pagination token in the response. The token returned in the response is supplied as input for the second request, thus returning matching parties 26 to 50, along with an updated token that can be supplied to return matching parties 51
+        to 75.
+      required: false
+      example: "Y||000000000|00000006008||"
+      schema:
+        type: string
+    searchPartiesCurrentRecordLimit:
+      name: currentRecordLimit
+      in: query
+      required: false
+      description: >-
+        The maximum number of matching parties that should be returned in
+        response to this request. This is the limit that should be applied to
+        the single response message.
+
+        Consumer may send a value to limit the records. If no value is supplied or
+        zero is supplied, all records up to the maximum of 50 will be returned
+        as part of one inquiry request. 
+
+        Note that this number represents the maximum number of records that the
+        consumer is able to handle in a single message. The actual number of
+        records selected could be more than this or less than this, depending on
+        the number of available records matching the selection criteria. If the
+        result set is more than this limit, the service will return a pagination token
+        (paginationToken) to allow the consumer to continue processing the result set.
+      example: 50
+      schema:
+        type: number
+        nullable: false
+    retrievePartyToPartyRelationshipCurrentRecordLimit:
+      name: currentRecordLimit
+      in: query
+      required: false
+      description: >-
+        The maximum number of related parties that should be returned in
+        response to this request. This is the limit that should be applied to
+        the single response message.
+
+        Consumer may send a value to limit the records. If no value is supplied or
+        zero is supplied, all records up to the maximum of 50 will be returned
+        as part of one inquiry request. 
+
+        Note that this number represents the maximum number of records that the
+        consumer is able to handle in a single message. The actual number of
+        records selected could be more than this or less than this, depending on
+        the number of available records matching the selection criteria. If the
+        result set is more than this limit, the service will return a pagination token
+        (paginationToken) to allow the consumer to continue processing the result set.
+      example: 50
+      schema:
+        type: number
+        nullable: false
+    relatedPartiesPaginationToken:
+      name: relatedPartiesPaginationToken
+      in: header
+      description: >-
+        If no value is supplied, then the first set of related parties (up to the current record limit of 50) will be returned. If additional related parties are being requested, then populate the pagination token with the token returned during the previous request. For instance, the first request returns 50 related parties along with a pagination token in the response. The token returned in the response is supplied as input for the second request, thus returning related parties 51 to 100, along with an updated token that can be supplied to return related parties 101 to 150.
+      required: false
+      schema:
+        type: string
+    retrievePartyToPartyRelationshipsPaginationToken:
+      name: paginationToken
+      in: header
+      description: >-
+        If no value is supplied, then the first set of related parties (up to the current record limit of 50) will be returned. If additional related parties are being requested, then populate the pagination token with the token returned during the previous request. For instance, the first request returns 50 related parties along with a pagination token in the response. The token returned in the response is supplied as input for the second request, thus returning related parties 51 to 100, along with an updated token that can be supplied to return related parties 101 to 150.
+      required: false
+      schema:
+        type: string
+    relatedPartiesCurrentRecordLimit:
+      name: relatedPartiesCurrentRecordLimit
+      in: query
+      required: false
+      description: >-
+        The maximum number of related parties that should be returned in
+        response to this request. This is the limit that should be applied to
+        the single response message.
+
+        Consumer may send a value to limit the records. If no value is supplied or
+        zero is supplied, all records up to the maximum of 50 will be returned
+        as part of one inquiry request. 
+
+        Note that this number represents the maximum number of records that the
+        consumer is able to handle in a single message. The actual number of
+        records selected could be more than this or less than this, depending on
+        the number of available records matching the selection criteria. If the
+        result set is more than this limit, the service will return a pagination token
+        (relatedPartiesPaginationToken) to allow the consumer to continue
+        processing the result set.
+      example: 50
+      schema:
+        type: number
+        nullable: false
+    retrievePartyToPartyRelationshipsCurrentRecordLimit:
+      name: currentRecordLimit
+      in: query
+      required: false
+      description: >-
+        The maximum number of related parties that should be returned in
+        response to this request. This is the limit that should be applied to
+        the single response message.
+
+        Consumer may send a value to limit the records. If no value is supplied or
+        zero is supplied, all records up to the maximum of 50 will be returned
+        as part of one inquiry request. 
+
+        Note that this number represents the maximum number of records that the
+        consumer is able to handle in a single message. The actual number of
+        records selected could be more than this or less than this, depending on
+        the number of available records matching the selection criteria. If the
+        result set is more than this limit, the service will return a pagination token
+        (paginationToken) to allow the consumer to continue processing the result set.
+      example: 50
+      schema:
+        type: number
+        nullable: false
+    relatedPartiesRelationshipType:
+      name: relatedPartiesRelationshipType
+      in: header
+      required: false
+      description: >-
+        Option attribute that will filter the Party's relationship to another party. The valid values are available from the retrievePersonControls API and retrieveOrganizationControls API, partyToPartyRelationshipTypeValidValues[].partyToPartyRelationshipType. Examples: 123 = Signer/Non-Owner, 124 = Signer/Owner. If supplied, only related parties matching the supplied relatedPartiesRelationshipType are returned. Multiple values can be supplied as input in a single call using a comma delimiter. For instance, if the relatedPartiesRelationshipType is supplied as "123, 124" any related parties matching the two (2) values are returned. If not specified, then all related parties are returned. 
+      example: 124
+      schema:
+        type: string
+        nullable: false
+    emailAddressesPaginationToken:
+      name: emailAddressesPaginationToken
+      in: header
+      description: >-
+        If no value is supplied, then the first set of email addresses (up to the current record limit of 10) will be returned. If additional email addresses are being requested, then populate the pagination token with the token returned during the previous request. For instance, the first request returns 10 email addresses along with a pagination token in the response. The token returned in the response is supplied as input for the second request, thus returning email addresses 11 to 20 along with an updated token that can be supplied to return email addresses 21 to 30.
+      example: "HME,2023-12-18"
+      required: false
+      schema:
+        type: string
+    phonesPaginationToken:
+      name: phonesPaginationToken
+      in: header
+      description: >-
+        If no value is supplied, then the first set of phones (up to the the current record limit of 10) will be returned. If additional phones are being requested, then populate the pagination token with the token returned during the previous request. For instance, the first request returns 10 phones along with a pagination token in the response. The token returned in the response is supplied as input for the second request, thus returning phones 11 to 20 along with an updated token that can be supplied to return phones 21 to 30.
+      example: "WRK,2023-12-18"
+      required: false
+      schema:
+        type: string
+    retrieveEmailAddressesPaginationToken:
+      name: paginationToken
+      in: header
+      description: >-
+        If no value is supplied, then the first set of email addresses (up to the current record limit of 10) will be returned. If additional email addresses are being requested, then populate the pagination token with the token returned during the previous request. For instance, the first request returns 10 email addresses along with a pagination token in the response. The token returned in the response is supplied as input for the second request, thus returning email addresses 11 to 20 along with an updated token that can be supplied to return email addresses 21 to 30.
+      example: "HME,2023-12-18"
+      required: false
+      schema:
+        type: string
+    emailAddressesCurrentRecordLimit:
+      name: emailAddressesCurrentRecordLimit
+      in: query
+      required: false
+      description: >-
+        The maximum number of related accounts that should be returned in
+        response to this request. This is the limit that should be applied to
+        the single response message.
+
+        Consumer may send a value to limit the records. If no value is supplied or
+        zero is supplied, all records up to the maximum of 10 will be returned
+        as part of one inquiry request. 
+
+        Note that this number represents the maximum number of records that the
+        consumer is able to handle in a single message. The actual number of
+        records selected could be more than this or less than this, depending
+        on the number of available records matching the selection criteria. If
+        the result set is more than this limit, the service will return a pagination token
+        (emailAddressesPaginationToken) to allow the consumer to continue
+        processing the result set.
+      example: 10
+      schema:
+        type: number
+        nullable: false
+    retrievePartyPhonesPaginationToken:
+      name: paginationToken
+      in: header
+      description: >-
+        If no value is supplied, then the first set of phones (up to the current record limit of 10) will be returned. If additional phones are being requested, then populate the pagination token with the token returned during the previous request. For instance, the first request returns 10 phones along with a pagination token in the response. The token returned in the response is supplied as input for the second request, thus returning phones 11 to 20 along with an updated token that can be supplied to return phones 21 to 30.
+      required: false
+      example: "HME,2023-12-18"
+      schema:
+        type: string
+      x-source-mapping:
+        sourceField: >-
+          /rest/IBSCI/v2/customers/{CustNbr}/phone-numbers GET Entity/control-data/RepoResnCde
+          /rest/IBSCI/v2/customers/{CustNbr}/phone-numbers GET Entity/control-data/RepoEffDte
+          /rest/IBSCI/v2/customers/{CustNbr}/phone-numbers GET Entity/control-data/MoreInd
+        description: >-
+          Return RepoResnCde + "," + RepoEffDte (e.g., WRK,2023-12-18) if MoreInd = "Y". RepoResnCde and RepoEffDte will return a value if there are more phone numbers to be returned. To view the next set of phone numbers, resubmit the inquiry using the value returned here.
+    retrieveEmailAddressesCurrentRecordLimit:
+      name: currentRecordLimit
+      in: query
+      required: false
+      description: >-
+        The maximum number of email addresses that should be returned in
+        response to this request. This is the limit that should be applied to
+        the single response message.
+
+        Consumer may send a value to limit the records. If no value is supplied or
+        zero is supplied, all records up to the maximum of 10 will be returned
+        as part of one inquiry request. 
+
+        Note that this number represents the maximum number of records that the
+        consumer is able to handle in a single message. The actual number of
+        records selected could be more than this  or less than this, depending
+        on the number of available records matching the selection criteria. If
+        the result set is more than this limit, the service will return a pagination token
+        (paginationToken) to allow the consumer to continue
+        processing the result set.
+      example: 10
+      schema:
+        type: number
+        nullable: false
+    retrievePartyPhonesCurrentRecordLimit:
+      name: currentRecordLimit
+      in: query
+      required: false
+      description: >-
+        The maximum number of phones that should be returned in
+        response to this request. This is the limit that should be applied to
+        the single response message.
+
+        Consumer may send a value to limit the records. If no value is supplied or
+        zero is supplied, all records up to the maximum of 10 will be returned
+        as part of one inquiry request. 
+
+        Note that this number represents the maximum number of records that the
+        consumer is able to handle in a single message. The actual number of
+        records selected could be more than this  or less than this, depending
+        on the number of available records matching the selection criteria. If
+        the result set is more than this limit, the service will return a pagination token
+        (paginationToken) to allow the consumer to continue
+        processing the result set.
+      example: 10
+      schema:
+        type: number
+        nullable: false
+    relatedAccountsPaginationToken:
+      name: relatedAccountsPaginationToken
+      in: header
+      description: >-
+        If no value is supplied, then the first set of related accounts (up to the current record limit) will be returned. If additional related accounts are being requested, then populate the pagination token with the token returned during the previous request. For instance, the first request returns 50 related accounts along with a pagination token in the response. The token returned in the response is   supplied as input for the second request, thus returning related accounts 51 to 100, along with an updated token that can be supplied to return related accounts 101 to 150.
+      required: false
+      example: "DP,3340002482,001,023,901,2023-12-18"
+      schema:
+        type: string
+    retrievePartyToAccountRelationshipsPaginationToken:
+      name: paginationToken
+      in: header
+      description: >-
+        If no value is supplied, then the first set of related accounts (up to the current record limit of 50) will be returned. If additional related accounts are being requested, then populate the pagination token with the token returned during the previous request. For instance, the first request returns 50 related accounts along with a pagination token in the response. The token returned in the response is
+        supplied as input for the second request, thus returning related accounts 51 to 100, along with an updated token that can be supplied to return related accounts 101 to 150.
+      required: false
+      example: "DP,3340002482,001,023,901,2023-12-18"
+      schema:
+        type: string
+    relatedAccountsCurrentRecordLimit:
+      name: relatedAccountsCurrentRecordLimit
+      in: query
+      required: false
+      description: >-
+        The maximum number of related accounts that should be returned in response to this request. This is the limit that should be applied to the single response message.  The relatedAccountsCurrentRecordLimit should not be changed after it has been established because all the following pages will have the same limit. From the second page on, the system does not accept or take into account the alternate value for the relatedAccountsCurrentRecordLimit (i.e. if the first call to the API supplies the value 50, then the API will limit the response to 50 records regardless of the value supplied for relatedAccountsCurrentRecordLimit in the second or later calls).
+
+        The consumer may send a value to limit the records. Although the API accepts the requested limit, the API is constrained to a derived maximum based upon the number and size of the attributes requested.  If the requested number of related accounts per page exceeds the maximum number that can be supported, the API provides an error along with the maximum number of related accounts that can be supported. In other words, if the consumer provides a value of 1000, it is unlikely that the system could return that much data in one request so an error will be returned. As such, choose a reasonable limit. 
+        
+        If no value is supplied, all records up to the derived maximum will be returned as part of one inquiry request and each page size may vary (based upon the size of the specific list of related accounts returned) and will not return consistent number of related accounts (e.g. 75 could be returned in the first response followed by 73 in the second).
+
+        Note that this limit represents the maximum number of records that the consumer is able to handle in a single message. The actual number of records selected could be more than this or less than this, depending on the number of available records matching the selection criteria. If the result set is more than this limit, the service will return a pagination token (relatedAccountsPaginationToken) to allow the consumer to continue processing the result set.  
+      example: 50
+      schema:
+        type: number
+        nullable: false
+    retrievePartyToAccountRelationshipsCurrentRecordLimit:
+      name: currentRecordLimit
+      in: query
+      required: false
+      description: >-
+        The maximum number of related accounts that should be returned in
+        response to this request. This is the limit that should be applied to
+        the single response message.
+
+        Consumer may send a value to limit the records. If no value is supplied or
+        zero is supplied, all records up to the maximum of 50 will be returned
+        as part of one inquiry request. 
+
+        Note that this number represents the maximum number of records that the
+        consumer is able to handle in a single message. The actual number of
+        records selected could be more than this  or less than this, depending
+        on the number of available records matching the selection criteria. If
+        the result set is more than this limit, the service will return a pagination token
+        (relatedAccountsPaginationToken) to allow the consumer to continue
+        processing the result set.      
+      schema:
+        type: number
+        nullable: false
+        example: 100
+    suppressPartyIndicator:
+      name: suppressPartyIndicator
+      required: false
+      in: query
+      description: >-
+        Optional attribute that indicates if party demographic information, KYC documentary identifications, and limited phones contact points (primary, secondary, fax only) should be suppressed from the response. Suppression of the specified attributes is recommended when invoking this API to obtain the next set of related parties and/or the next set of related accounts when the first invocation did not return them all (i.e., relatedPartiesPaginationToken or relatedAccountsPaginationToken has a value in the response). If the party demographic information, phone contact points, and KYC documentary identifications are not needed in the response when obtaining subsequent sets of the related parties and/or related accounts, then set the value of this attribute to true. Suppressing attributes that are not needed by the consumer will increase the performance of the API. If indicator is not provided, the API will not suppress the specific party attributes (false is the default).  
+      example: false
+      schema:
+        type: boolean
+        nullable: false
+    suppressRelatedPartiesIndicator:
+      name: suppressRelatedPartiesIndicator
+      required: false
+      in: query
+      description: >-
+        Optional attribute that indicates if party relationships should be
+        suppressed from the response. Suppressing attributes that are not needed
+        by the consumer will increase the performance of the API. If indicator
+        is not provided, the API will suppress party relationships (true is
+        the default). 
+      example: true
+      schema:
+        type: boolean
+        nullable: false
+    suppressRelatedAccountsIndicator:
+      name: suppressRelatedAccountsIndicator
+      required: false
+      in: query
+      description: >-
+        Optional attribute that indicates if account relationships should be
+        suppressed from the response. Suppressing attributes that are not needed
+        by the consumer will increase the performance of the API. If indicator
+        is not provided, the API will suppress account relationships (true is the default). 
+      example: true
+      schema:
+        type: boolean
+        nullable: false
+    suppressEmailAddressesIndicator:
+      name: suppressEmailAddressesIndicator
+      required: false
+      in: query
+      description: >-
+        Optional attribute that indicates if email addresses should be
+        suppressed from the response. Suppressing attributes that are not needed
+        by the consumer will increase the performance of the API. If indicator
+        is not provided, the API will suppress email addresses (true is the default). 
+      example: true
+      schema:
+        type: boolean
+        nullable: false
+    suppressPhonesIndicator:
+      name: suppressPhonesIndicator
+      required: false
+      in: query
+      description: >-
+        Optional attribute that indicates if complete list of phones should be suppressed from the response. Suppressing attributes that are not needed by the consumer will increase the performance of the API. If indicator is not provided, the API will suppress the complete list of phones (true is the default). However, provided that suppressPartyIndicator is false (default value), the primary, secondary, and fax phones are returned with the party demographic information by the retrieveParty API, provided they are defined. As such, the phones array may contain phone numbers with phoneType = "PRI", "SEC", or "FAX" respectively. To obtain the complete list of phones, set suppressPhonesIndicator = false.
+      example: true
+      schema:
+        type: boolean
+        nullable: false
+    suppressKYCidentificationsIndicator:
+      name: suppressKYCidentificationsIndicator
+      required: false
+      in: query
+      description: >-
+        Optional attribute that indicates if KYC Documentary identifications
+        should be suppressed from the response. Suppressing attributes that are
+        not needed by the consumer will increase the performance of the API. If
+        indicator is not provided, the API will not suppress KYC Documentary
+        identifications (true is the default). 
+      example: true
+      schema:
+        type: boolean
+        nullable: false
+    suppressPartyRolesIndicator:
+      name: suppressPartyRolesIndicator
+      required: false
+      in: query
+      description: >-
+        Optional attribute that indicates if party roles should be suppressed
+        from the response. Suppressing attributes that are not needed by the
+        consumer will increase the performance of the API. If indicator is not
+        provided, the API will not suppress party roles (true is the default). 
+      example: true
+      schema:
+        type: boolean
+        nullable: false
+    partyIdentifier:
+      name: partyIdentifier
+      in: header
+      description: >-
+        Customer identifier value. The party identifier is a unique identifier
+        for a party.
+      example: '2525770'
+      required: true
+      schema:
+        type: string
+        nullable: false
+        maxLength: 11
+    partyIdentifierOptional:
+      name: partyIdentifier
+      in: header
+      description: >-
+        Customer identifier value. The party identifier is a unique identifier
+        for a party.
+      required: false
+      schema:
+        type: string
+        nullable: false
+        maxLength: 11
+    accountTypeForAccountRelationships:
+      name: accountType
+      in: header
+      description: >-
+        Account Type which classifies the type of product with which an account
+        is associated (e.g. DDA, SVG, CDS, CCA, DCA, SLA, RCA, ILA, MTG). If
+        supplied, only accounts matching the supplied accountType are returned.
+        Multiple values can be supplied as input in a single call using a comma
+        delimiter. For instance, if accountType is supplied as "DDA, SVG", then
+        only the accounts with accountType both DDA, SVG are returned. 
+      required: false
+      example: DDA
+      schema:
+        type: string
+        nullable: false
+    accountStatusCodeForAccountRelationships:
+      name: accountStatusCode
+      in: header
+      description: >-
+        Status of the account. Valid values: C = Closed, O = Open, V = Virtual Bank Manager (Internet accounts only). If supplied, only accounts matching the supplied accountStatusCode are returned. Only one value can be supplied as input in a single call. For instance, if the accountStatusCode is supplied as "O", then only the accounts with accountStatusCode O (Open) are returned.  
+      required: false
+      example: O
+      schema:
+        type: string
+        nullable: false
+    partyRoleCodeForAccountRelationships:
+      name: partyRoleCode
+      in: header
+      description: >-
+        Party Account Role (e.g. 023 for Joint, 033 for Custodian). The party account role specifies the party's role/relationship to the account. If supplied, only accounts matching the supplied partyRoleCode are returned. Multiple values can be supplied as input in a single call using comma delimiter. For instance, if the partyRoleCode is supplied as "023, 033", then only the accounts with partyRoleCode 023 or 033 are
+        returned. The valid values are available from the retrievePersonControls API and retrieveOrganizationControls API, partyRoleCodeValidValues[].partyRoleCode. 
+      required: false
+      example: 023
+      schema:
+        type: string
+        nullable: false
+    taxIdentifier:
+      name: taxIdentifier
+      in: header
+      description: >-
+        '** MANDATORY FOR SEARCHES BY TAX IDENTIFIER **  Party tax identifier. Tax identifier is required when tax identifier type is supplied as input.'
+      required: false
+      example: "283551234"
+      schema:
+        type: string
+        nullable: true
+    taxIdentifierRequired:
+      name: taxIdentifier
+      in: header
+      description: >-
+        '** MANDATORY FOR SEARCHES BY TAX IDENTIFIER **  Party tax identifier. Tax identifier is required when tax identifier type is supplied as input.'
+      required: true
+      example: "283551234"
+      schema:
+        type: string
+        nullable: true
+    taxIdentifierType:
+      name: taxIdentifierType
+      in: header
+      description: >-
+        ** OPTIONAL FOR SEARCHES BY TAX IDENTIFIER **  The type of taxIdentifier. Tax identifier type is optional when tax identifier is supplied as input. If supplied, the API will ensure that the tax identifier is supplied and in the valid format for the type of tax identifier. The valid values are available from the retrievePersonControls API or retrieveOrganizationControls API, taxIdentifierTypeValidValues[].taxIdentifierType. 
+      required: false
+      example: "SSN"
+      schema:
+        type: string
+        nullable: true
+    partyType:
+      name: partyType
+      in: query
+      description: |-
+        ** OPTIONAL WHEN SEARCHING BY NAME OR ADDRESS ** 
+         Denotes if a party is an person/individual or organization/business. Valid values are "PERSON" or "ORGANIZATION". If the party type is not supplied as input, the API searches for person/individual parties only (partyType = PERSON). To search for an organization/business, set partyType = "ORGANIZATION". The party type qualifier is not applicable when searching with tax identifier (taxIdentifier).
+      required: false
+      example: "PERSON"
+      schema:
+        type: string
+        nullable: true
+    firstName:
+      name: firstName
+      in: header
+      description: >-
+        ** OPTIONAL WHEN SEARCHING BY NAME OR ADDRESS **  The first name (given name) of a person
+        party.  Search is case insensitive.  Applicable for person parties only
+        (partyType = PERSON). 
+      required: false
+      example: "John"
+      schema:
+        type: string
+        nullable: true
+    lastName:
+      name: lastName
+      in: header
+      description: >-
+        ** OPTIONAL WHEN SEARCHING BY NAME OR ADDRESS **  The last name (surname) of a person party. 
+        Search is case insensitive.  Applicable for person parties only
+        (partyType = PERSON).
+      required: false
+      example: "Doe"
+      schema:
+        type: string
+        nullable: true
+    middleName:
+      name: middleName
+      in: header
+      description: >-
+        ** OPTIONAL WHEN SEARCHING BY NAME OR ADDRESS **  The middle name of a person party. 
+        Search is case insensitive.  Applicable for person parties only
+        (partyType = PERSON).
+      required: false
+      example: "David"
+      schema:
+        type: string
+        nullable: true
+    namePrefix:
+      name: prefix
+      in: header
+      description: >-
+        ** OPTIONAL WHEN SEARCHING BY NAME OR ADDRESS **  The name prefix/title (greeting or salutation) for a person party (e.g. MR, MS, MRS, MISS, DR). The valid values are available from the retrievePersonControls API, namePrefixValidValues[].namePrefix. Search is case insensitive. Applicable for person parties only (partyType = PERSON).
+      required: false
+      example: "DR"
+      schema:
+        type: string
+        nullable: true
+    nameSuffix:
+      name: suffix
+      in: header
+      description: >-
+        ** OPTIONAL WHEN SEARCHING BY NAME OR ADDRESS **  The name suffix for a person party, which contains one or more professional suffix or title abbreviations that follows a person's name, indicating their profession, academic achievements, or professional status. Examples include "MD" for medical doctor, "DDS" for Doctor Dental Surgury, "JD" for Juris Doctor, "RN" for Registered Nurse, "CPA" for Certified Public Accountant, "CMA" for Certified Management Accountant, or "MBA" signifies that the person holds a Master of Business Administration degree. The valid values are available from the retrievePersonControls API, nameSuffixValidValues[].nameSuffix. Search is case insensitive. Example: PHD  Applicable for person parties only (partyType = PERSON).
+      required: false
+      example: "MD"
+      schema:
+        type: string
+        nullable: true
+    nameGeneration:
+      name: generation
+      in: header
+      description: >-
+        ** OPTIONAL WHEN SEARCHING BY NAME OR ADDRESS **  Party/Customer Generation. The valid values are available from the retrievePersonControls API, nameGenerationValidValues[].nameGeneration.  Search is case insensitive.  Examples: JR, SR, I, II, III.  Applicable for person parties only (partyType = PERSON).
+      required: false
+      example: "SR"
+      schema:
+        type: string
+        nullable: true
+    organizationName:
+      name: organizationName
+      in: header
+      description: >-
+        ** OPTIONAL WHEN SEARCHING BY NAME OR ADDRESS **  Business/Organization Customer Name. 
+        Search is case insensitive.  Applicable for organization parties only
+        (partyType = ORGANIZATION).
+      required: false
+      example: "AUTOMATION TECHNOLOGIES CONSULTING INC"
+      schema:
+        type: string
+        nullable: true
+    partyNameStandardizationRequiredIndicator:
+      name: partyNameStandardizationRequiredIndicator
+      required: false
+      in: header
+      description: >-
+        ** OPTIONAL FOR SEARCHES THAT INCLUDE PARTY NAME ATTRIBUTES **  Controls
+        whether name standardization is applied to party name attributes before
+        searching.  True: (default value) Standardize name attributes before
+        searching. False: DO NOT standarize name attributes before searching.
+      example: true
+      schema:
+        type: boolean
+        nullable: false
+    addressLine1:
+      name: addressLine1
+      in: header
+      description: >-
+        ** OPTIONAL WHEN SEARCHING BY NAME OR ADDRESS **  Party postal address line 1. Search is
+        case insensitive.
+      required: false
+      example: "401 MAIN ST"
+      schema:
+        type: string
+        nullable: true
+    addressLine2:
+      name: addressLine2
+      in: header
+      description: >-
+        ** OPTIONAL WHEN SEARCHING BY NAME OR ADDRESS **  Party postal address line 2. Search is case insensitive.
+      required: false
+      schema:
+        type: string
+        nullable: true
+    addressLine3:
+      name: addressLine3
+      in: header
+      description: |-
+        ** OPTIONAL WHEN SEARCHING BY NAME OR ADDRESS ** Party postal address line 3. Search is case insensitive.
+      required: false
+      schema:
+        type: string
+        nullable: true
+    postalAddressCity:
+      name: postalAddressCity
+      in: header
+      description: >-
+        ** OPTIONAL WHEN SEARCHING BY NAME OR ADDRESS ** Party postal address city. Search is
+        case insensitive.
+      required: false
+      example: HINCKLEY
+      schema:
+        type: string
+        nullable: true
+    postalAddressStateProvince:
+      name: postalAddressStateProvince
+      in: header
+      description: >-
+        ** OPTIONAL WHEN SEARCHING BY NAME OR ADDRESS ** Party postal address state or province. If country is USA, then values are defined by codes available from the retrievePersonControls API, stateProvinceValidValues[].stateProvince. Until postalAddressCountryCode is added as an optional header attribute, the country is assumed to be USA. 
+      required: false
+      example: "OH"
+      schema:
+        type: string
+        nullable: true
+    postalCode:
+      name: postalCode
+      in: header
+      description: >-
+        ** OPTIONAL WHEN SEARCHING BY NAME OR ADDRESS ** Party postal address postal code (zip
+        code). 
+      required: false
+      example: 44233
+      schema:
+        type: string
+        nullable: true
+    countryCode:
+      name: postalAddressCountryCode
+      in: header
+      description: >-
+        ** OPTIONAL WHEN SEARCHING BY NAME OR ADDRESS ** Party postal address country code. The valid values are available from the retrievePersonControls API and retrieveOrganizationControls API, countryCodeValidValues[].countryISOalpha3Code. Search is case in-sensitive.
+      required: false
+      example: "USA"
+      schema:
+        type: string
+        nullable: true
+    postalAddressStandardizationRequiredIndicator:
+      name: postalAddressStandardizationRequiredIndicator
+      required: false
+      in: header
+      description: >-
+        ** OPTIONAL FOR SEARCHES THAT INCLUDE ADDRESS ATTRIBUTES **  True: (default
+        value) Standardize address attributes before searching. False: DO NOT
+        standarize address attributes before searching. Address standardization can
+        only be performed on US addresses. If country code is specified and it is not
+        equal to USA, then the address will NOT be standardized. The following
+        address search attributes are required before an address can be
+        standardized: addressLine1, city, and stateProvince OR addressLine1 and
+        postalCode.
+      example: true
+      schema:
+        type: boolean
+        nullable: false
+  schemas:
+    accountIdentifier:
+      type: string
+      description: >-
+        Unique identifier for an account. 
+      example: 3340002482
+    accountSourceSystemIdentifier:
+      type: string
+      nullable: false
+      example: DP
+      description: >-
+        The account source system identifier (e.g. CBM = Cardbase Management, CPN = Customer Profitability, DP = Deposit System, LN = Loan System, MLOAN = Mortgage loan, RP = Relationship Packaging, SB = Safe Deposit Box). The valid values are available from the retrieveAccountControls API, accountSourceSystemIdentifierValidValues[].accountSourceSystemIdentifier.
+    accountSourceSystemIdentifierDescription:
+      type: string
+      example: "Deposit System"
+      description: >-
+        The account source system identifier description (e.g. CBM = Cardbase Management, CPN = Customer Profitability, DP = Deposit System, LN = Loan System, MLOAN = Mortgage loan, RP = Relationship Packaging, SB = Safe Deposit Box).
+    bankIdentifier:
+      type: string
+      nullable: false
+      example: '422'
+      description: >-
+        Bank identifier associated with the account. The valid values are available from the retrieveAccountControls API, bankIdentifierValidValues[].bankIdentifier.
+    accountToPartyInvolvements:
+      description: >-
+        The account to party involvements array specifies each role/relationship
+        that the account has to the party. Some parties may have more than role/relationship to the account (POA and Beneficiary). However, at Seacoast, the party is not defined with one party role of POA and another party role of beneficiary. Instead, the party is assigned a party role code that combines both roles (POA and Beneficiary). As such, this accountToPartyInvolvements array is not needed.
+      type: array
+      items:
+        type: object
+        properties:
+          partyRoleCode:
+            $ref: '#/components/schemas/partyRoleCode'
+          authorizingPartyIdentifier:
+            $ref: '#/components/schemas/authorizingPartyIdentifier'
+        required:
+          - partyRoleCode
+    partyRoleCode:
+      description: >-
+        Party Account Role (e.g. 023 for Joint (and), 033 for Custodian). The
+        party account role specifies the party's role/relationship to the
+        account. The valid values are available from the retrievePersonControls API and retrieveOrganizationControls APIs, accountPartyRoleCodeValidValues[].partyRoleCode. 
+      type: string
+      nullable: false
+      example: "023"
+    partyRoleCodeDescription:
+      description: >-
+        Party Account Role (e.g. 023 for Joint (and), 033 for Custodian) Description. 
+      type: string
+      nullable: false
+      example: "JOINT"
+    authorizingPartyIdentifier:
+      description: >-
+        Required in order to retrieve a linkage relationship (partyRoleCode = "LNK"), delegate relationship (partyRoleCode = "DLG") or authorized signer relationship       (partyRoleCode = "AUS"). This attribute contains the party source system identifier (e.g., IVR, QFD) of the party that is authorizing the relationship. The authorizing party (identified with authorizingPartyIdentifier) must have a first-name or other-name relationship to the account in order to authorize another party with a linkage, delegate, or authorized signer relationship. Party must already exist in the system of record.
+      type: string
+      nullable: false
+      example: '100005489772'
+    branchIdentifierAccount:
+      description: >-
+        Branch assigned to the Account- Initially established with account
+        opening process and will only be updated to a new branch if existing
+        branch has closed.
+      type: string
+      nullable: false
+      example: '00123'
+    accountTaxIdentifier:
+      description: Account tax Identifier.
+      type: string
+      nullable: false
+      example: '342925198'
+    accountTaxIdentifierType:
+      description: >-
+        Account tax Identifier Type. Examples include: SSN, EIN, ITIN. The valid values are available from the retrievePersonControls API or retrieveOrganizationControls API, taxIdentifierTypeValidValues[].taxIdentifierType. 
+      type: string
+      nullable: false
+      example: SSN
+    taxIdentifierType:
+      description: >-
+        Tax Identifier Type. Examples include: SSN, EIN, ITIN. The valid values are available from the retrievePersonControls API or retrieveOrganizationControls API, taxIdentifierTypeValidValues[].taxIdentifierType. 
+      type: string
+      nullable: false
+      example: SSN
+    taxIdentifierTypeDescription:
+      description: Tax identifier type description. 
+      type: string
+      example: "SOCIAL SECURITY NUMBER"
+    accountAddressLine1:
+      type: string
+      description: Account Address line 1
+      nullable: false
+      example: Billing Department
+    accountAddressLine2:
+      type: string
+      nullable: false
+      description: Account Address line 2
+      example: 401 Main Street
+    accountAddressLine3:
+      type: string
+      nullable: false
+      description: Account Address line 3
+      example: Suite 100
+    accountAddressLine4:
+      type: string
+      nullable: false
+      description: Account Address line 4
+      example: Office 7
+    accountAddressLine5:
+      type: string
+      nullable: false
+      description: Account Address line 5
+      example: "Attn: Billing"
+    accountCity:
+      type: string
+      nullable: false
+      description: Account Address City/Town Name
+      example: Hinckley
+    accountStateProvince:
+      type: string
+      nullable: false
+      description: Account Address State or Province Code
+      example: OH
+    accountPostalCode:
+      type: string
+      nullable: false
+      description: Account Address Zip or Postal Code
+      example: 44233
+    accountCounty:
+      type: string
+      nullable: false
+      description: Account Address County
+      example: Medina
+    accountCountryCode:
+      type: string
+      nullable: false
+      description: Account Address Country (ISO Code) 
+      example: USA
+    accountEffectiveStartMonthDay:
+      type: string
+      nullable: false
+      description: Address Effective Start Month Day
+      example: 0129
+    accountEffectiveEndMonthDay:
+      type: string
+      nullable: false
+      description: Address Effective End Month Day
+      example: '0513'
+    accountPitneyBowesIdentifier:
+      type: string
+      nullable: false
+      description: >-
+        GEO Unique Physical Location Identifier that is essential to Pitney
+        Bowes enrichment data process.  Can be used to compare addresses even
+        though spelled differently.  Also can be obtained from other partners
+        using Pitney Bowes Key from Master Location Data.
+      example: P0000NHG4LYZ
+    accountAddressLastUpdateDateTime:
+      description: >-
+        Address last update date/time. Attribute is returned in the UTC format CCYY-MM-DDThh:mm:ss.sssZ, unless a specific time zone is requested by supplying requestTimeZone. For instance, if "America/New_York" is specified for requestTimeZone, date/time attribute is returned in CCYY-MM-DDThh:mm:ss.sss format, assuming the time zone is EST in the winter and EDT in the summer.
+      type: string
+      nullable: false
+      format: date-time
+      example: '2020-03-14T12:59:060Z'
+    accountAddressLastUpdateUserIdentifier:
+      description: Address Last Updated By Name
+      type: string
+      nullable: false
+      example: PL00000
+    partyRoleEffectiveDate:
+      description: >-
+        Effective date of the party role/relationship (partyRoleCode). ISO Format accepted CCYY-MM-DD.
+      type: string
+      format: date
+      nullable: false
+      example: '2000-01-01'
+    partyRoleExpiryDate:
+      description: >-
+        Expiration date of the party role/relationship (partyRoleCode). If expiration date is not defined, then party/role relationship does not expire. ISO Format accepted CCYY-MM-DD.
+      type: string
+      format: date
+      nullable: false
+      example: '2030-01-01'
+    openingDate:
+      description: >-
+        The date the account was opened in its source system. ISO Format accepted CCYY-MM-DD.
+      type: string
+      format: date
+      nullable: false
+      example: '2000-01-01'
+    closingDate:
+      description: >-
+        The date the account was closed. ISO Format accepted CCYY-MM-DD.
+      type: string
+      format: date
+      nullable: false
+      example: '2025-07-31'
+    nextStatementDate:
+      description: >-
+        The date the statement will next be produced for the account. ISO Format accepted CCYY-MM-DD.
+      type: string
+      format: date
+      nullable: false
+      example: '2025-07-31'
+    lastStatementDate:
+      description: >-
+        The date a statement was last produced for the account. If the account is new, the last statement date will not be returned until a statement is produced. ISO Format accepted CCYY-MM-DD.
+      type: string
+      format: date
+      nullable: false
+      example: '2025-06-30'
+    purgeDateTime:
+      description: >-
+        The date the account was purged. Attribute is returned in the UTC format CCYY-MM-DDThh:mm:ss.sssZ, unless a specific time zone is requested by supplying requestTimeZone. For instance, if "America/New_York" is specified for requestTimeZone, date/time attribute is returned in CCYY-MM-DDThh:mm:ss.sss format, assuming the time zone is EST in the winter and EDT in the summer.
+      type: string
+      format: date
+      nullable: false
+      example: '2000-01-01T23:59:59.001Z'
+    accountStatusCode:
+      description: >-
+        Status of the account. Valid values: C = Closed, O = Open, V = Virtual Bank Manager (Internet accounts only). The value of "V" is not applicable to deposit accounts. The value of "V" is applicable to loans and other miscelleneous accounts. The valid values are available from the retrieveAccountControls API, accountStatusCodeValidValues[].accountStatusCode.
+      type: string
+      nullable: false
+      example: O
+    accountOpenStatusCode:
+      description: >-
+        Open Status of the account. Valid values: 
+        <Blank> = Open account
+        B = Closed by bank
+        C = Closed by customer
+        E = Pending closed by customer
+        K = Pending closed by bank
+        P = Closed by processing
+        Z = Zero balance account
+        O = Opened by deposit
+        The valid values are available from the retrieveAccountControls API, accountOpenStatusCodeValidValues[].accountOpenStatusCode.
+      type: string
+      nullable: false
+      example: O
+    availableBalance:
+      description: >-
+        Available balance, which is the amount of funds available for withdrawal.  The balance is calculated as ledger balance minus holds minus float plus unused provisional credit (PRA) plus/minus today's on-line transactions plus related account's available balance if applicable. This is a monetary value with 2 decimal positions precision. 
+      type: number
+      format: decimal
+      nullable: false
+      example: 10456.17
+    currentBalance:
+      description: >-
+        Current balance. The balance is calculated as ledger balance plus/minus today's on-line activity. This is a monetary value with 2 decimal positions precision. 
+      type: number
+      format: decimal
+      nullable: false
+      example: 10456.17
+    ledgerBalance:
+      description: >-
+        Ledger balance, as of last posting date. This is a monetary value with 2 decimal positions precision. 
+      type: number
+      format: decimal
+      nullable: false
+      example: 12456.17
+    interestRate:
+      description: >-
+        Interest Rate. This is a monetary value with 2 decimal positions precision. 
+      type: number
+      format: decimal
+      nullable: false
+      example: 12456.17
+    accountTitleType:
+      description: >-
+        Account title line type that denotes its sequence. Examples values include: LGL_TTL_LN_1, LGL_TTL_LN_2. The valid values are available from the retrievePersonControls API, accountTitleTypeValidValues[].accountTitleType.
+      type: string
+      nullable: false
+      example: LGL_TTL_LN_1
+    accountTitleLine:
+      description: This is the free form text attribute which contains the legal titling value.
+      type: string
+      nullable: false
+      example: NORMAN PAINTING & LANDSCAPING INC.
+    accountTitleStartDateTime:
+      description: >-
+        Date the account title was created or last changed. Attribute is returned in the UTC format CCYY-MM-DDThh:mm:ss.sssZ, unless a specific time zone is requested by supplying requestTimeZone. For instance, if "America/New_York" is specified for requestTimeZone, date/time attribute is returned in CCYY-MM-DDThh:mm:ss.sss format, assuming the time zone is EST in the winter and EDT in the summer.
+      type: string
+      nullable: false
+      format: date-time
+      example: '2020-01-01T23:59:59.001Z'
+    accountTitleSourceSystemIdentifier:
+      description: Account Title Source System Identifier
+      type: string
+      nullable: false
+      example: CIF
+    accountCategory:
+      type: string
+      nullable: false
+      example: D
+      description: >-
+        The account category identifies the category of the account in the system of record. In the context of a deposit account, valid values include: C = Certificate of deposit, D = Demand deposit account, K = Revolving Credit, M = Money Market, S = Savings. The valid values are available from the retrieveAccountControls API, accountCategoryValidValues[].accountCategory.
+    accountCategoryDescription:
+      type: string
+      nullable: false
+      example: "Demand deposit account"
+      description: >-
+        The account category description identifies the category of the account in the system of record. The attribute contains the descriptive attribute explaining the account category (accountCategory). In the context of a deposit account, valid values include: C = Certificate of deposit, D = Demand deposit account, K = Revolving Credit, M = Money Market, S = Savings.
+    accountType:
+      type: string
+      nullable: false
+      example: "010"
+      description: >-
+        The account type identifies the type of account in the system of record (e.g. 010 = CLASSIC CHECKING, 033 = PREMIER MM-PERSONAL, 049 = SEACOAST SAVINGS). The valid values are available from the retrieveAccountControls API, accountTypeValidValues[].    accountType.
+    productCode:
+      description: >-
+        Product code which further qualifies the account type (e.g. FCC, ICK,
+        BCK in context of accountType of DDA).
+      type: string
+      nullable: false
+      example: ICK
+    packageCode:
+      description: >-
+        Package Code which further qualifies the account type and product code
+        (e.g. KSM, VRM, WCM, NFB in context of accountType of DDA, HBK in
+        context of accountType BBP).
+      type: string
+      nullable: false
+      example: KSM
+    response401:
+      type: object
+      properties:
+        status:
+          description: Status of the response.
+          type: string
+          nullable: false
+          example: "ERROR"
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              code:
+                $ref: '#/components/schemas/errorCode9000101'
+              message:
+                $ref: '#/components/schemas/errorMessageUnauthorizedError'
+            required:
+              - code
+              - message
+          description: >-
+            EIS error instance is followed by error instance(s) from source
+            system only in case of source system failures/errors.  If failure
+            occurs at service level due to missing attributes, incorrect format
+            of attributes, invalid attribute values, or connection issues, only
+            EIS error instance is returned.
+      required:
+        - status
+        - errors
+    maintainResponse403:
+      type: object
+      properties:
+        status:
+          description: Status of the response.
+          type: string
+          nullable: false
+          example: "ERROR"
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              code:
+                $ref: '#/components/schemas/errorCode9000103'
+              message:
+                $ref: '#/components/schemas/errorMessageForbiddenWriteError'
+            required:
+              - code
+              - message
+          description: >-
+            EIS error instance is followed by error instance(s) from source
+            system only in case of source system failures/errors.  If failure
+            occurs at service level due to missing attributes, incorrect format
+            of attributes, invalid attribute values, or connection issues, only
+            EIS error instance is returned.
+      required:
+        - status
+        - errors
+    retrieveResponse403:
+      type: object
+      properties:
+        status:
+          description: Status of the response.
+          type: string
+          nullable: false
+          example: "ERROR"
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              code:
+                $ref: '#/components/schemas/errorCode9000103'
+              message:
+                $ref: '#/components/schemas/errorMessageForbiddenReadError'
+            required:
+              - code
+              - message
+          description: >-
+            EIS error instance is followed by error instance(s) from source
+            system only in case of source system failures/errors.  If failure
+            occurs at service level due to missing attributes, incorrect format
+            of attributes, invalid attribute values, or connection issues, only
+            EIS error instance is returned.
+      required:
+        - status
+        - errors
+    response500:
+      type: object
+      properties:
+        status:
+          description: Status of the response.
+          type: string
+          example: ERROR
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              code:
+                $ref: '#/components/schemas/errorCode8000108'
+              message:
+                $ref: '#/components/schemas/errorMessageProviderSystemError'
+            required:
+              - code
+              - message
+          description: >-
+            EIS error instance is followed by error instance(s) from source
+            system only in case of source system failures/errors.  If failure
+            occurs at service level due to missing attributes, incorrect format
+            of attributes, invalid attribute values, or connection issues, only
+            EIS error instance is returned.
+      required:
+        - status
+        - errors
+    errorCode2000109:
+      type: string
+      nullable: false
+      example: "2000103"
+      description: >-
+        Returns the EIS error code or source system error code,
+        depending upon the errors instance. EIS specific error codes
+        are prefixed with 'EIS-' in the message. Source system error
+        codes are prefixed with the source system mnemonic (e.g.
+        'FIS-'). 
+
+        2000109 = EIS-Ineligible Error: Customer maintenance is
+        permitted for a person, not an organization.
+      x-serviceCodes: >
+       code: 2000109
+
+        description: EIS-Ineligible Error: Customer maintenance is
+        permitted for a person, not an organization.
+    errorCode2000101:
+      type: string
+      nullable: false
+      example: "2000101"
+      description: >-
+        Returns the EIS error code or source system error code, depending upon the errors instance. EIS specific error codes are prefixed with 'EIS-' in the message. Source system error codes are prefixed with the source system mnemonic (e.g. 'FIS-') in the message. 
+
+
+        2000101 = EIS-Mandatory Data Missing: {description}
+
+
+        2000102 = EIS-Invalid Data: {description}
+
+
+        2000105 = EIS-Unaccepted Special Characters: {description}
+
+
+        8000101 = EIS-Mandatory Data Missing: {description}
+                                              
+
+        8000102 = EIS-Invalid Data: {description}
+                                    
+      x-serviceCodes: |
+        code: 2000101
+        description: EIS-Mandatory Data Missing: {description}
+                                                 
+
+        code: 2000102
+        description: EIS-Invalid Data: {description}
+                                       
+
+        code: 2000105
+        description: EIS-Unaccepted Special Characters: {description}
+
+        code: 8000101
+        description: EIS-Mandatory Data Missing: {description}
+                                                
+
+        code: 8000102
+        description: EIS-Invalid Data: {description}
+    errorCode2000102:
+      type: string
+      nullable: false
+      example: "2000102"
+      description: >-
+        Returns the EIS error code or source system error code, depending upon the errors instance. EIS specific error codes are prefixed with 'EIS-' in the message. Source system error codes are prefixed with the source system mnemonic (e.g. 'FIS-') in the message. 
+
+
+        2000101 = EIS-Mandatory Data Missing: {description}
+
+
+        2000102 = EIS-Invalid Data: {description}
+
+
+        2000105 = EIS-Unaccepted Special Characters: {description}
+
+
+        8000101 = EIS-Mandatory Data Missing: {description}
+                                              
+
+        8000102 = EIS-Invalid Data: {description}
+                                    
+      x-serviceCodes: |
+        code: 2000101
+        description: EIS-Mandatory Data Missing: {description}
+                                                 
+
+        code: 2000102
+        description: EIS-Invalid Data: {description}
+                                       
+
+        code: 2000105
+        description: EIS-Unaccepted Special Characters: {description}
+
+        code: 8000101
+        description: EIS-Mandatory Data Missing: {description}
+                                                
+
+        code: 8000102
+        description: EIS-Invalid Data: {description}
+    errorCode2000103:
+      type: string
+      nullable: false
+      example: "2000103"
+      description: >-
+        Returns the EIS error code or source system error code, depending upon the errors instance. EIS specific error codes are prefixed with 'EIS-' in the message. Source system error codes are prefixed with the source system mnemonic (e.g. 'FIS-') in the message. 
+
+
+        2000103 = EIS-Request Data not Available: {description}
+                                   
+      x-serviceCodes: |
+        code: 2000103
+        description: EIS-Request Data not Available: {description}
+    errorCode8000104:
+      type: string
+      nullable: false
+      example: "8000104"
+      description: >-
+        Returns the EIS error code or source system error code, depending upon the errors instance. EIS specific error codes  are prefixed with 'EIS-' in the message. Source system error codes are prefixed with the source system mnemonic (e.g. 'FIS-') in the message. 
+        8000104 = EIS-Read Error: The operation has encountered a provider read exception or error.
+      x-serviceCodes: >
+        code: 8000104
+
+        description: EIS-Read Error: The operation has encountered a provider read exception or error.
+        found.
+    errorCode8000108:
+        type: string
+        nullable: false
+        example: "8000108"
+        description: >-
+          Returns the EIS error code or source system error code,
+          depending upon the errors instance. EIS specific error codes
+          are prefixed with 'EIS-' in the message. Source system error
+          codes are prefixed with the source system mnemonic (e.g.
+          'FIS-') in the message. 
+
+
+          8000103 = EIS-Create Exception: {description}
+
+
+          8000106 = EIS-Duplicate Record: {description}
+
+
+          8000107 = EIS-Update Error: {description}
+
+
+          8000108 = EIS-Provider System Exception: {description}
+        x-serviceCodes: |
+          code: 8000103
+          description: EIS-Create Exception: {description}
+
+          code: 8000106
+          description: EIS-Duplicate Record: {description}
+
+          code: 8000107
+          description: EIS-Update Error: {description}
+
+          code: 8000108
+          description: EIS-Provider System Exception: {description}
+    errorCode8000109:
+      type: string
+      nullable: false
+      example: "8000109"
+      description: >-
+        Returns the EIS error code or source system error code, depending upon the errors instance. EIS specific error codes  are prefixed with 'EIS-' in the message. Source system error codes are prefixed with the source system mnemonic (e.g. 'FIS-') in the message. 
+        8000109 = EIS-Partial Read Error: Attributes were retrieved other than #attributeDescription.
+      x-serviceCodes: >
+        code: 8000109
+
+        description: EIS-Partial Read Error: Attributes were retrieved other than #attributeDescription.
+    errorCode8000110:
+      type: string
+      nullable: false
+      example: "8000110"
+      description: >-
+        Returns the EIS error code or source system error code, depending upon the errors instance. EIS specific error codes  are prefixed with 'EIS-' in the message. Source system error codes are prefixed with the source system mnemonic (e.g. 'FIS-') in the message. 
+        8000110 = EIS-Partial Update Error: Changes were partially saved. All changes were applied other than #errorDescription.
+      x-serviceCodes: >
+        code: 8000110
+
+        description: EIS-Partial Update Error: Changes were partially saved. All changes were applied other than #errorDescription.
+    errorCode9000101:
+      type: string
+      nullable: false
+      example: "9000101"
+      description: >-
+        Returns the EIS error code or source system error code, depending upon the errors instance. EIS specific error codes  are prefixed with 'EIS-' in the message. Source system error codes are prefixed with the source system mnemonic (e.g. 'FIS-') in the message. 
+        9000101 = EIS-Unauthorized: The operation is not authorized.
+      x-serviceCodes: >
+        code: 9000101
+
+        description: EIS-Unauthorized: The operation is not authorized.
+        found.
+    errorCode9000103:
+      type: string
+      nullable: false
+      example: "9000103"
+      description: >-
+        Returns the EIS error code or source system error code, depending upon the errors instance. EIS specific error codes  are prefixed with 'EIS-' in the message. Source system error codes are prefixed with the source system mnemonic (e.g. 'FIS-') in the message. 
+        9000101 = EIS-Unauthorized: The operation is not authorized.
+      x-serviceCodes: >
+        code: 9000103
+
+        description: EIS-Forbidden: The requested operation requires [#attributeDescription] access.
+    errorMessageAgentIdentifierRequired:
+      type: string
+      description: >-
+        Returns the EIS error description or source system description, depending upon the errors instance. EIS specific error codes are prefixed with 'EIS-' in the message. Source system error codes are prefixed with the source system mnemonic (e.g. 'FIS-'). If failure occurs at service level due to missing attributes, incorrect format of attributes, or invalid values, description is populated with the attribute causing the error. 
+      example: "EIS-Mandatory Data Missing: Agent identifier [agentIdentifier] is required."
+    errorMessagePartyIdentifierRequired:
+      type: string
+      description: >-
+        Returns the EIS error description or source system description, depending upon the errors instance. EIS specific error codes are prefixed with 'EIS-' in the message. Source system error codes are prefixed with the source system mnemonic (e.g. 'FIS-'). If failure occurs at service level due to missing attributes, incorrect format of attributes, or invalid values, description is populated with the attribute causing the error. 
+      example: "EIS-Mandatory Data Missing: Party identifier [partyIdentifier] is required."
+    errorMessageLastNameRequired:
+      type: string
+      description: >-
+        Returns the EIS error description or source system description, depending upon the errors instance. EIS specific error codes are prefixed with 'EIS-' in the message. Source system error codes are prefixed with the source system mnemonic (e.g. 'FIS-'). If failure occurs at service level due to missing attributes, incorrect format of attributes, or invalid values, description is populated with the attribute causing the error. 
+      example: "EIS-Mandatory Data Missing: Last name [personName.lastName] is required."
+    errorMessageValidationOperationRequired:
+      type: string
+      description: >-
+        Returns the EIS error description or source system description, depending upon the errors instance. EIS specific error codes are prefixed with 'EIS-' in the message. Source system error codes are prefixed with the source system mnemonic (e.g. 'FIS-'). If failure occurs at service level due to missing attributes, incorrect format of attributes, or invalid values, description is populated with the attribute causing the error. 
+      example: "EIS-Invalid Data: Validation operation [validationOperation] is invalid."
+    errorMessageReadError:
+      type: string
+      nullable: false
+      description: >-
+        Returns the EIS error description or source system description, depending upon the errors instance. EIS specific error codes are prefixed with 'EIS-' in the message. Source system error codes are prefixed with the source system mnemonic (e.g. 'FIS-'). If failure occurs at service level due to missing attributes, incorrect format of attributes, or invalid values, description is populated with the attribute causing the error. 
+      example: "EIS-Read Error: The operation has encountered a provider read exception or error."
+    errorMessagePersonControlsReadError:
+      type: string
+      nullable: false
+      description: >-
+        Returns the EIS error description or source system description, depending upon the errors instance. EIS specific error codes are prefixed with 'EIS-' in the message. Source system error codes are prefixed with the source system mnemonic (e.g. 'FIS-'). If failure occurs at service level due to missing attributes, incorrect format of attributes, or invalid values, description is populated with the attribute causing the error. 
+      example: "EIS-Request Data not Available: Person controls are not available because an error was encountered retrieving the control attributes."
+    errorMessageOrganizationControlsReadError:
+      type: string
+      nullable: false
+      description: >-
+        Returns the EIS error description or source system description, depending upon the errors instance. EIS specific error codes are prefixed with 'EIS-' in the message. Source system error codes are prefixed with the source system mnemonic (e.g. 'FIS-'). If failure occurs at service level due to missing attributes, incorrect format of attributes, or invalid values, description is populated with the attribute causing the error. 
+      example: "EIS-Request Data not Available: Organization controls are not available because an error was encountered retrieving the control attributes."
+    errorMessagePartialUpdateError:
+      type: string
+      nullable: false
+      description: >-
+        Returns the EIS error description or source system description, depending upon the errors instance. EIS specific error codes are prefixed with 'EIS-' in the message. Source system error codes are prefixed with the source system mnemonic (e.g. 'FIS-'). If failure occurs at service level due to missing attributes, incorrect format of attributes, or invalid values, description is populated with the attribute causing the error. 
+      example: "EIS-Partial Update Error: Changes were partially saved. All changes were applied other than #errorDescription."
+    errorMessagePartialReadError:
+      type: string
+      nullable: false
+      description: >-
+        Returns the EIS error description or source system description, depending upon the errors instance. EIS specific error codes are prefixed with 'EIS-' in the message. Source system error codes are prefixed with the source system mnemonic (e.g. 'FIS-'). If failure occurs at service level due to missing attributes, incorrect format of attributes, or invalid values, description is populated with the attribute causing the error. 
+      example: "EIS-Partial Read Error: Attributes were retrieved other than #attributeDescription."
+    errorMessageIneligibleError:
+      type: string
+      nullable: false
+      description: >-
+        Returns the EIS error description or source system description, depending upon the errors instance. EIS specific error codes are prefixed with 'EIS-' in the message. Source system error codes are prefixed with the source system mnemonic (e.g. 'FIS-'). If failure occurs at service level due to missing attributes, incorrect format of attributes, or invalid values, description is populated with the attribute causing the error. 
+      example: "EIS-Ineligible Error: Customer maintenance is
+        permitted for a person, not an organization."
+    errorMessageProviderSystemError:
+      type: string
+      nullable: false
+      description: >-
+        Returns the EIS error description or source system description, depending upon the errors instance. EIS specific error codes are prefixed with 'EIS-' in the message. Source system error codes are prefixed with the source system mnemonic (e.g. 'FIS-'). If failure occurs at service level due to missing attributes, incorrect format of attributes, or invalid values, description is populated with the attribute causing the error. 
+      example: "EIS-Provider System Exception: The operation has encountered an unexpected provider exception or error."
+    errorMessageUnauthorizedError:
+      type: string
+      nullable: false
+      description: >-
+        Returns the EIS error description or source system description, depending upon the errors instance. EIS specific error codes are prefixed with 'EIS-' in the message. Source system error codes are prefixed with the source system mnemonic (e.g. 'FIS-'). If failure occurs at service level due to missing attributes, incorrect format of attributes, or invalid values, description is populated with the attribute causing the error. 
+      example: "EIS-Unauthorized: The operation is not authorized."
+    errorMessageForbiddenReadError:
+      type: string
+      nullable: false
+      description: >-
+        Returns the EIS error description or source system description, depending upon the errors instance. EIS specific error codes are prefixed with 'EIS-' in the message. Source system error codes are prefixed with the source system mnemonic (e.g. 'FIS-'). If failure occurs at service level due to missing attributes, incorrect format of attributes, or invalid values, description is populated with the attribute causing the error. 
+      example: "EIS-Forbidden: The requested operation requires [Party] access."
+    errorMessageForbiddenWriteError:
+      type: string
+      nullable: false
+      description: >-
+        Returns the EIS error description or source system description, depending upon the errors instance. EIS specific error codes are prefixed with 'EIS-' in the message. Source system error codes are prefixed with the source system mnemonic (e.g. 'FIS-'). If failure occurs at service level due to missing attributes, incorrect format of attributes, or invalid values, description is populated with the attribute causing the error. 
+      example: "EIS-Forbidden: The requested operation requires [Party.Write] access."
+    partyIdentifier:
+      type: string
+      nullable: false
+      example: '2525770'
+      description: >-
+        The party identifier is a unique identifier for a party.
+    relatedPartyIdentifier:
+      type: string
+      nullable: false
+      example: '100005489192'
+      description: >-
+        Party identifier of the related party. Party must already exist in the system of record. 
+    partyStartDateRegister:
+      type: string
+      format: date
+      nullable: false
+      example: '2012-06-22'
+      description: >-
+        The party start/since date reflects the date in which a party is created. Depending upon the provider, the date reflects the date in which the party was first a prospect. There are no defaults to this attribute. 
+
+        In comparison, customer since date (customerSinceDate) reflects the date on which a party first had a formal party-to-party or account-to-party relationship documented at the bank. This date is derived by the system of record and should only be updated by operations applications.
+
+        Input is accepted in UTC format of CCYY-MM-DD.
+    partyStartDateUpdate:
+      type: string
+      format: date
+      nullable: true
+      example: '2012-06-22'
+      description: >-
+        The party start/since date reflects the date in which a party is created. Depending upon the provider, the date reflects the date in which the party was first a prospect. There are no defaults to this attribute. 
+
+        In comparison, customer since date (customerSinceDate) reflects the date on which a party first had a formal party-to-party or account-to-party relationship documented at the bank. This date is derived by the system of record and should only be updated by operations applications.
+
+        Input is accepted in UTC format of either CCYY-MM-DD. To delete, set attribute to null.
+    socialSecurityTaxIdentifierRegister:
+      type: string
+      nullable: false
+      example: '273443309'
+      description: 'Social security number (SSN).'
+    socialSecurityTaxIdentifierUpdate:
+      type: string
+      nullable: true
+      example: '273443309'
+      description: 'Social security number (SSN). To delete, set attribute to null.'
+    socialSecurityTaxIdentifierRegularExpression:
+      type: string
+      nullable: false
+      example: >-
+        “^(?!123456789)(?!000000000)(?!111111111)(?!333333333)(?!666|000|9\d{2})\d{3}(?!00)\d{2}(?!0{4})\d{4}$”
+      description: >-
+        Social security number (SSN) regular expression. The regular expression contains the validation rules required to validate the content of the social security number (e.g., does not begin with "000", "666", "900" series, fourth and fifth position does not contain "00", sixth through ninth position does not contain "0000", identifier cannot be all zeros, ones, or threes and cannot be consecutive digits in numerical order; "123456789"). 
+    individualTaxIdentifierRegister:
+      type: string
+      nullable: false
+      example: '940509993'
+      description: >-
+        An ITIN, or Individual Taxpayer Identification Number, is a tax
+        processing number only available for certain nonresident and resident
+        aliens, their spouses, and dependents who cannot get a Social Security
+        Number (SSN). 
+    individualTaxIdentifierUpdate:
+      type: string
+      nullable: true
+      example: '940509993'
+      description: >-
+        An ITIN, or Individual Taxpayer Identification Number, is a tax
+        processing number only available for certain nonresident and resident
+        aliens, their spouses, and dependents who cannot get a Social Security
+        Number (SSN). To delete the individualTaxIdentifier, set the 
+        individualTaxIdentifier to null.
+    individualTaxIdentifierResponse:
+      type: string
+      nullable: true
+      example: '940509993'
+      description: >-
+        An ITIN, or Individual Taxpayer Identification Number, is a tax
+        processing number only available for certain nonresident and resident
+        aliens, their spouses, and dependents who cannot get a Social Security
+        Number (SSN). The tax identifier returned in the response is the current
+        value of the tax identifier, which may differ from the value supplied in
+        the request.
+    individualTaxIdentifierRegularExpression:
+      type: string
+      nullable: false
+      example: '^9[0-9]{2}(5[0-9]|6[0-5]|7[0-9]|8[0-8]|9[0-2]|9[4-9])[0-9]{4}$'
+      description: >-
+        Individual tax identification number (ITIN) regular expression. The regular expression contains the validation rules required to validate the content of the individual tax identifier (e.g., 9 digits with first digit "9" and fourth and fifth digits in a range of numbers from "50" to "65", "70" to "88", “90” to “92”or “94” to “99”).
+    legalEntityIdentifierRegularExpression:
+      type: string
+      nullable: false
+      example: '^[A-Z0-9]{20}$'
+      description: >-
+        Legal entity identifier (LEI) regular expression. The regular expression
+        contains the validation rules required to validate the content of the
+        Legal entity identifier (LEI), which must be 20 characters in length and
+        contain alphanumeric value (0-9, A-Z). 
+    employerTaxIdentifierResponse:
+      type: string
+      nullable: true
+      example: '342925198'
+      description: >-
+        Employer tax identification number (EIN).  The tax identifier returned
+        in the response is the current value of the tax identifier, which may
+        differ from the value supplied in the request.
+    cusipIssuerIdentifierRegister:
+      type: string
+      example: 037833
+      description: >-
+        The CUSIP issuer is the first six characters of the CUSIP number. The
+        CUSIP number is a unique identifier assigned to all stocks and    
+        registered bonds in the United States and Canada, and it is used to
+        create a concrete distinction between securities that are traded on
+        public markets. CUSIP refers to the Committee on Uniform Securities
+        Identification Procedures which oversees the entire CUSIP system. These
+        numbers are used to help facilitate trades and settlements by providing
+        a constant identifier to help distinguish the securities within a trade.
+        Each trade and the corresponding CUSIP number are recorded to facilitate
+        the tracking of actions and activities. 
+
+          The CUSIP number consists of a combination of nine characters, including letters and number, which act as a sort of DNA for the security, uniquely identifying the company or issuer and the type of security. The following explains what each character represents.
+
+            The first six characters identify the issuer and are assigned alphabetically.
+
+            The seventh and eighth characters, which can be alphabetical or numerical, identify the type of security.
+
+            The ninth and last digit is used as a check digit.
+      nullable: false
+    cusipIssuerIdentifierUpdate:
+      type: string
+      example: 037833
+      description: >-
+        The CUSIP issuer is the first six characters of the CUSIP number. The
+        CUSIP number is a unique identifier assigned to all stocks and    
+        registered bonds in the United States and Canada, and it is used to
+        create a concrete distinction between securities that are traded on
+        public markets. CUSIP refers to the Committee on Uniform Securities
+        Identification Procedures which oversees the entire CUSIP system. These
+        numbers are used to help facilitate trades and settlements by providing
+        a constant identifier to help distinguish the securities within a trade.
+        Each trade and the corresponding CUSIP number are recorded to facilitate
+        the tracking of actions and activities. 
+
+          The CUSIP number consists of a combination of nine characters, including letters and number, which act as a sort of DNA for the security, uniquely identifying the company or issuer and the type of security. The following explains what each character represents.
+
+            The first six characters identify the issuer and are assigned alphabetically.
+
+            The seventh and eighth characters, which can be alphabetical or numerical, identify the type of security.
+
+            The ninth and last digit is used as a check digit.
+          
+        To delete, set attribute to null.
+      nullable: true
+    #w8BENstatusRegister:
+    #  type: string
+    #  example: B
+    #  description: >-
+    #    W-8 BEN Status. Example values include:
+    #    N = Not a foreign resident.
+    #    B = W-8BEN; no certification date required. 
+    #    C = W-8BEN; certification date and a U.S. taxpayer identification number (TIN) required.  
+    #    F = W-8BEN-E; no certification date required.
+    #    G = W-8BEN-E; certification date and a U.S. taxpayer identification number (TIN) required.  
+    #    E = W-8ECI; no certification date required.  
+    #    X = W-8EXP; no certification date required.  
+    #    I = W-8IMY; no certification date required.  
+    #    Y = Foreign resident using Form W-8 requiring recertification by 12/31/2000. 
+    #    
+    #    The valid values are available from the retrievePersonControls API, w8BENstatusValidValues[].w8BENstatus. 
+    #  nullable: false
+    #w8BENstatusUpdate:
+    #  type: string
+    #  example: B
+    #  description: >-
+    #    W-8 BEN Status. Example values include:
+    #    N = Not a foreign resident.
+    #    B = W-8BEN; no certification date required. 
+    #    C = W-8BEN; certification date and a U.S. taxpayer identification number (TIN) required.  
+    #    F = W-8BEN-E; no certification date required.
+    #    G = W-8BEN-E; certification date and a U.S. taxpayer identification number (TIN) required.  
+    #    E = W-8ECI; no certification date required.  
+    #    X = W-8EXP; no certification date required.  
+    #    I = W-8IMY; no certification date required.  
+    #    Y = Foreign resident using Form W-8 requiring recertification by 12/31/2000. 
+    #   
+    #    The valid values are available from the retrievePersonControls API, w8BENstatusValidValues[].w8BENstatus.  To delete, set attribute to null.
+    # nullable: true
+    #w8BENWitholdingCommentsRegister:
+    #  type: string
+    #  example: W8 BEN Comments
+    #  description: W-8 BEN Comments.
+    #  nullable: false
+    #w8BENWitholdingCommentsUpdate:
+    #  type: string
+    #  example: W8 BEN Comments
+    #  description: 'W-8 BEN Comments. To delete, set attribute to null.'
+    #  nullable: true
+    #w8BENeffectiveDateRegister:
+    #  type: string
+    #  format: date
+    #  nullable: false
+    #  example: '2025-07-03'
+    #  description: >-
+    #    W-8 BEN effective date. The date the foreign customer was last certified. Format accepted CCYY-MM-DD. 
+    #w8BENeffectiveDateUpdate:
+    #  type: string
+    #  format: date
+    #  nullable: true
+    #  example: '2025-07-03'
+    #  description: >-
+    #    W-8 BEN effective date. The date the foreign customer was last certified. Format accepted CCYY-MM-DD. To delete, set attribute to null.
+    #w8BENWitholdingStartDateTime:
+    #  type: string
+    #  format: date-time
+    #  nullable: false
+    #  example: '2000-01-01T23:59:59.001Z'
+    #  description: >-
+    #    W-8 BEN effective date.  If the attribute is not provided during an add,
+    #    it is defaulted to the system date/time. Input is accepted in UTC format of either CCYY-MM-DDThh:mm:ss.sssZ or CCYY-MM-DDThh:mm:ssZ and attribute is returned in UTC format CCYY-MM-DDThh:mm:ss.sssZ, unless a specific time zone is requested by supplying requestTimeZone. For instance, if "America/New_York" is specified for requestTimeZone, date/time attributes are provided in CCYY-MM-DDThh:mm:ss.sss or CCYY-MM-DDThh:mm:ss format and returned in CCYY-MM-DDThh:mm:ss.sss format, assuming the time zone is EST in the winter and EDT in the summer.
+    #w8BENstatusDescription:
+    #  type: string
+    #  example: CERTIFIED
+    #  description: >-
+    #    W-8 BEN Status Description. 
+    #pnaStatusRegister:
+    #  type: object
+    #  description: >-
+    #    Identifies whether a customer has been certified for W9 and defines a
+    #    withholding category. 
+    #  properties:
+    #    pnaWithholdingCategory:
+    #      $ref: '#/components/schemas/pnaWithholdingCategoryRegister'
+    #    startDateTime:
+    #      $ref: '#/components/schemas/pnaStatusStartDateTime'
+    #  required:
+    #    - pnaWithholdingCategory
+    #pnaStatusUpdate:
+    #  type: object
+    #  description: >-
+    #    Identifies whether a customer has been certified for W9 and defines a
+    #    withholding category. 
+    #  properties:
+    #    pnaWithholdingCategory:
+    #      $ref: '#/components/schemas/pnaWithholdingCategoryUpdate'
+    #    startDateTime:
+    #      $ref: '#/components/schemas/pnaStatusStartDateTime'
+    #  required:
+    #    - pnaWithholdingCategory
+    #pnaWithholdingCategoryRegister:
+    #  type: string
+    #  example: G
+    #  description: >-
+    #    PNA withholding category. Example values include: G=The customer is within the 14 business day grace period, 1=First B Notice issued, 2=Second B Notice issued, V=The customer is missing TIN certification, C=Customer TIN has been certified, P=Under reporter (IRS C Notice), E=Customer is exempt from 1099 interest reporting, I=Customer
+    #    TIN is invalid due to death. The valid values are available from the retrievePersonControls API, pnaWithholdingCategoryValidValues[].pnaWithholdingCategory. 
+    #  nullable: false
+    #pnaWithholdingCategoryUpdate:
+    #  type: string
+    #  example: G
+    #  description: >-
+    #    PNA withholding category. Example values include: G=The customer is within the 14 business day grace period, 1=First B Notice issued, 2=Second B Notice issued, V=The customer is missing TIN certification, C=Customer TIN has been certified, P=Under reporter (IRS C Notice), E=Customer is exempt from 1099 interest reporting, I=Customer
+    #    TIN is invalid due to death. The valid values are available from the retrievePersonControls API, pnaWithholdingCategoryValidValues[].pnaWithholdingCategory. To delete, set attribute to null.
+    #  nullable: true
+    #pnaWithholdingCategoryDescription:
+    #  type: string
+    #  example: The customer is within the 14 business day grace period
+    #  description: >-
+    #    PNA withholding category description. Example values include: G=The customer is within the 14 business day grace period, 1=First B Notice issued, 2=Second B Notice issued, V=The customer is missing TIN certification, C=Customer TIN has been certified, P=Under reporter (IRS C Notice), E=Customer is exempt from 1099 interest reporting, I=Customer
+    #    TIN is invalid due to death.
+    #pnaStatusStartDateTime:
+    #  type: string
+    #  format: date-time
+    #  nullable: false
+    #  example: '2000-01-01T23:59:59.001Z'
+    #  description: >-
+    #    PNA status effective/start date. W-8 BEN effective date. If the attribute is
+    #    not provided during an add, it is defaulted to the system date/time. Input is accepted in UTC format of either CCYY-MM-DDThh:mm:ss.sssZ or CCYY-MM-DDThh:mm:ssZ and attribute is returned in UTC format CCYY-MM-DDThh:mm:ss.sssZ, unless a specific time zone is requested by supplying requestTimeZone. For instance, if "America/New_York" is specified for requestTimeZone, date/time attributes are provided in CCYY-MM-DDThh:mm:ss.sss or CCYY-MM-DDThh:mm:ss format and returned in CCYY-MM-DDThh:mm:ss.sss format, assuming the time zone is EST in the winter and EDT in the summer.
+    branchIdentifierRegister:
+      description: Branch Identifier
+      type: string
+      nullable: false
+      example: '00132'
+    branchIdentifierUpdate:
+      description: 'Branch Identifier. To delete, set attribute to null.'
+      type: string
+      nullable: true
+      example: '00132'
+    lastUpdateDateTime:
+      description: >-
+        Date/time the party name and/or address were last updated. Attribute is returned in the UTC format CCYY-MM-DDThh:mm:ss.sssZ, unless a specific time zone is requested by supplying requestTimeZone. For instance, if "America/New_York" is specified for requestTimeZone, date/time attribute is returned in CCYY-MM-DDThh:mm:ss.sss format, assuming the time zone is EST in the winter and EDT in the summer.
+      type: string
+      nullable: false
+      format: date-time
+      example: '2020-03-14T12:59:06.001Z'
+    lastUpdateUserIdentifier:
+      description: Last Updated By Name
+      type: string
+      example: ABC
+    stateProvinceRegister:
+      type: string
+      nullable: false
+      description: >- 
+        Customer Address State or Province Code. The valid values are available from the retrievePersonControls API and retrieveOrganizationControls API, stateProvinceValidValues[].stateProvince. 
+      example: OH
+    stateProvinceUpdate:
+      type: string
+      nullable: true
+      description: >-
+        Customer Address State or Province Code. The valid values are available from the retrievePersonControls API and retrieveOrganizationControls API, stateProvinceValidValues[].stateProvince. To delete, set attribute to null.
+      example: OH
+    stateProvinceName:
+      type: string
+      description: Customer Address State or Province Code Description
+      example: Ohio
+    countryResponse:
+      type: object
+      description: >-
+        Country expressed as ISO Alpha-2 and Alpha-3 codes, IRS Code, and country name
+        Name.
+      properties:
+        countryISOalpha3Code:
+          $ref: '#/components/schemas/countryISOalpha3Code'
+        countryISOalpha2Code:
+          $ref: '#/components/schemas/countryISOalpha2Code'
+        countryIRSalpha2code:
+          $ref: '#/components/schemas/countryIRSalpha2Code'
+        countryName:
+          $ref: '#/components/schemas/countryName'
+    countryISOalpha2Code:
+      type: string
+      nullable: true
+      example: US
+      description: Country ISO two-letter (alpha-2) code from ISO 3166-1.
+    countryISOalpha3Code:
+      type: string
+      nullable: true
+      example: USA
+      description: Country ISO three-letter (alpha-3) code from ISO 3166-1.
+    countryIRSalpha2Code:
+      type: string
+      nullable: true
+      example: US
+      description: Country IRS two-letter (alpha-2) code.
+    emailAddressDeleteIndicator:
+      type: boolean
+      example: false
+      nullable: false
+      description: >-
+        To delete the email, send the emailAddress and set emailAddressDeleteIndicator
+        to true.
+    emailAddressEndDateTime:
+      example: '2024-05-23T17:22:59.022Z'
+      type: string
+      format: date-time
+      nullable: false
+      description: >-
+        Date/time the email address was deleted, returned in the UTC format CCYY-MM-DDThh:mm:ss.sssZ, unless a specific time zone is requested by supplying requestTimeZone. For instance, if "America/New_York" is specified for requestTimeZone, date/time attribute is returned in CCYY-MM-DDThh:mm:ss.sss format, assuming the time zone is EST in the winter and EDT in the summer.
+    phoneDeleteIndicator:
+      type: boolean
+      example: false
+      nullable: false
+      description: >-
+        To delete the phone, send the phoneNumber and set phoneDeleteIndicator
+        to true.
+    phoneEndDateTime:
+      example: '2024-05-23T17:22:59.022Z'
+      type: string
+      format: date-time
+      nullable: false
+      description: >-
+        Date/time the phone number was deleted, returned in the UTC format CCYY-MM-DDThh:mm:ss.sssZ, unless a specific time zone is requested by supplying requestTimeZone. For instance, if "America/New_York" is specified for requestTimeZone, date/time attributes are returned in CCYY-MM-DDThh:mm:ss.sss format, assuming the time zone is EST in the winter and EDT in the summer.
+    phoneEndDateTimeRegister:
+      example: '2024-05-23T17:22:59.022Z'
+      type: string
+      format: date-time
+      nullable: false
+      description: >-
+        Date/time the phone number was deleted, returned in the UTC format CCYY-MM-DDThh:mm:ss.sssZ, unless a specific time zone is requested by supplying requestTimeZone. For instance, if "America/New_York" is specified for requestTimeZone, date/time attributes are returned in CCYY-MM-DDThh:mm:ss.sss format, assuming the time zone is EST in the winter and EDT in the summer.
+        
+        When a party is created, if the system of record determines that the supplied information matches an existing party and subsequently auto-collapses the newly created party (i.e., does not create a new party), it is possible that the existing party had one or more phones that were end-dated in order to make room for the phone(s) that were supplied as part of the create party request. As such, when this use-case occurs, any phone that was end-dated will be populated with the date/time when the phone was deleted. 
+    phoneNumber:
+      type: string
+      nullable: false
+      example: '5551112222'
+      description: Phone number.
+    phoneExtensionRegister:
+      type: string
+      example: '3459'
+      description: Phone number extension.
+      nullable: false
+    phoneExtensionUpdate:
+      type: string
+      example: '3459'
+      description: Phone number extension. 
+      nullable: true
+    fromPhoneNumber:
+      type: string
+      nullable: false
+      example: '5551112222'
+      description: >-
+        When replacing a phone number, the from phone number contains an
+        existing phone number that is being replaced with the to phone number.
+        The from phone number must exist in order to replace it with a new phone
+        number. The to phone number must be a new phone number and not an
+        existing phone number.
+    toPhoneNumber:
+      type: string
+      nullable: false
+      example: '5552223333'
+      description: >-
+        When replacing a phone number, the from phone number contains an
+        existing phone number that is being replaced with the to phone number.
+        The from phone number must exist in order to replace it with a new phone
+        number. The to phone number must be a new phone number and not an
+        existing phone number.
+        phonePrimaryIndicator:
+    phonePrimaryIndicator:
+      type: boolean
+      nullable: false
+      example: true
+      description: Primary indicator. Set to true if the phone is the primary phone.  
+    phoneType:
+      type: string
+      nullable: false
+      example: MBL
+      description: >-
+        The phone type indicates the purpose/context for use of the phone. Example values
+        include: BUS = Business, FAX = Fax, HME = Home, INC = International Cell, 
+        INT = Internet, INW = International Work, MBL = Mobile, PRI = Primary, RES = Residence, SEC = Secondary, WRK = Work. The valid values are available from the retrievePersonControls API and retrieveOrganizationControls API, phoneTypeValidValues[].phoneType.
+    phoneTypeDescription:
+      type: string
+      nullable: false
+      example: Mobile
+      description: >-
+        The phone type indicates the purpose/context for use of the phone. Example values
+        include: BUS = Business, FAX = Fax, HME = Home, INC = International Cell, 
+        INT = Internet, INW = International Work, MBL = Mobile, PRI = Primary, RES = Residence, 
+        SEC = Secondary, WRK = Work.
+    phoneEffectiveDate:
+      type: string
+      format: date
+      nullable: false
+      example: '2025-06-30'
+      description: Effective date of the phone number. Phone number can be future dated. 
+        If this attribute is not supplied when adding a phone number, it will be defaulted 
+        to the system date. The effective date is required to delete the phone. Format accepted CCYY-MM-DD. 
+    phoneExpiryDateRegister:
+      type: string
+      format: date
+      nullable: false
+      example: '2026-01-30'
+      description: Expiration date of the phone number. If this attribute is not supplied 
+        when adding a phone number, the phone number is valid indefinitely. Format accepted CCYY-MM-DD. 
+    phoneExpiryDateUpdate:
+      type: string
+      format: date
+      nullable: true
+      example: '2026-01-30'
+      description: Expiration date of the phone number. If this attribute is not supplied 
+        when adding a phone number, the phone number is valid indefinitely. To delete, set 
+        attribute to null. Format accepted CCYY-MM-DD. 
+    phoneLocationRegister:
+      type: string
+      example: UNITED STATES / CANADA
+      description: >-
+        Phone location (e.g. UNITED STATES / CANADA, DOMINICAN REPUBLIC,
+        AUSTRALIA).  
+      nullable: false
+    phoneLocationUpdate:
+      type: string
+      example: UNITED STATES / CANADA
+      description: >-
+        Phone location (e.g. UNITED STATES / CANADA, DOMINICAN REPUBLIC,
+        AUSTRALIA). To delete, set attribute to null.
+      nullable: true
+    phoneInternationalAccessCodeRegister:
+      type: string
+      example: '001'
+      description: >-
+        An international access code, also known as a dial-out code, is a number dialed from within a country to initiate a call to another country. This signals to the phone network that an international call is being placed. 
+      nullable: false
+    phoneInternationalAccessCodeUpdate:
+      type: string
+      example: '011'
+      description: >-
+        An international access code, also known as a dial-out code, is a number dialed from within a country to initiate a call to another country. This signals to the phone network that an international call is being placed. To delete, set attribute to null.
+      nullable: true
+    phoneISDcodeRegister:
+      type: string
+      example: '1'
+      description: >-
+        International Subscriber Dialing (ISD) code. The valid values are available from the retrievePersonControls API and retrieveOrganizationControls API, phoneISDcodeValidValues[].phoneISDcode.
+      nullable: false
+    phoneISDcodeUpdate:
+      type: string
+      example: '1'
+      description: >-
+        International Subscriber Dialing (ISD) code. The valid values are available from the retrievePersonControls API and retrieveOrganizationControls API, phoneISDcodeValidValues[].phoneISDcode. To delete, set attribute to null.
+      nullable: true
+    conduitRegister:
+      type: string
+      example: MOB
+      description: >-
+        Phone connection type. Example values include: MOB = MOBILE, LAN = LANDLINE, VOIP = VOIP, SKYPE = SKYPE, TOLL_FREE = TOLL FREE. The valid values are available from the retrievePersonControls API, phoneNumberConduitValidValues[].phoneNumberConduit.
+      nullable: false
+    conduitUpdate:
+      type: string
+      example: MOB
+      description: >-
+        Phone connection type. Example values include: MOB = MOBILE, LAN = LANDLINE, VOIP = VOIP, SKYPE = SKYPE, TOLL_FREE = TOLL FREE. The valid values are available from the retrievePersonControls API, phoneNumberConduitValidValues[].phoneNumberConduit.To
+        delete, set attribute to null.
+      nullable: true
+    phoneISDdescription:
+      type: string
+      example: "UNITED STATES / CANADA"
+      description: >-
+        Phone International Subscriber Dialing (ISD) description. The
+        description is based upon the combination of ISD Code and Location. 
+    phoneNumberConduitDescription:
+      type: string
+      example: MOBILE
+      description: >-
+        Phone connection type description. MOB = MOBILE LAN = LANDLINE VOIP =
+        VOIP SYKPE = SKYPE TOLL_FREE = TOLL FREE
+    emailAddress:
+      type: string
+      nullable: false
+      example: MSmith@gmail.com
+      description: Email address.
+    emailType:
+      type: string
+      nullable: false
+      example: HME
+      description: >-
+        The email type indicates the purpose/context for use of the email. Example values
+        include: BUS = Business, CON = Confidential, FAM = Family, HME = Home, KID = Children, PRI = Primary, SEC = Secondary, SPC = Special, WRK = Work. The valid values are available from the retrievePersonControls API and retrieveOrganizationControls API, emailTypeValidValues[].emailType.
+    emailTypeDescription:
+      type: string
+      nullable: false
+      example: Home
+      description: >-
+        The email type indicates the purpose/context for use of the email. Example values
+        include: BUS = Business, CON = Confidential, FAM = Family, HME = Home, KID = Children, PRI = Primary, SEC = Secondary, SPC = Special, WRK = Work. 
+    emailEffectiveDate:
+      type: string
+      format: date
+      nullable: false
+      example: '2025-06-30'
+      description: Effective date of the email address. Email address can be future dated. 
+        If this attribute is not supplied when adding an email address, it is defaulted to the system date. The effective date is required to delete the email. Format accepted CCYY-MM-DD. 
+    emailExpiryDateRegister:
+      type: string
+      format: date
+      nullable: false
+      example: '2026-01-30'
+      description: Expiration date of the email address. If this attribute is not supplied 
+        when adding an email address, the email address is valid indefinitely. Format accepted CCYY-MM-DD. 
+    emailExpiryDateUpdate:
+      type: string
+      format: date
+      nullable: true
+      example: '2026-01-30'
+      description: Expiration date of the email address. If this attribute is not supplied 
+        when adding an email address, the email address is valid indefinitely. Format accepted CCYY-MM-DD. To delete, set attribute to null. Format accepted CCYY-MM-DD. 
+    fromEmailAddress:
+      type: string
+      nullable: false
+      example: MSmith@gmail.com
+      description: >-
+        When replacing an email address, the from email address contains an
+        existing email address that is being replaced with the to email address.
+        The from email address must exist in order to replace it with a new
+        email address. The to email address must be a new email address and not
+        an existing email address.
+    toEmailAddress:
+      type: string
+      nullable: false
+      example: MSmith2@gmail.com
+      description: >-
+        When replacing an email address, the from email address contains an
+        existing email address that is being replaced with the to email address.
+        The from email address must exist in order to replace it with a new
+        email address. The to email address must be a new email address and not
+        an existing email address.
+    emailPrimaryIndicator:
+      type: boolean
+      nullable: false
+      example: true
+      description: >-
+        Primary indicator. Set to true if the email address is the primary email
+        address.
+    postalAddressDelete:
+      type: object
+      properties:
+        postalAddressDeleteIndicator:
+          type: boolean
+          example: false
+          nullable: false
+          description: >-
+            To delete the address, send the address and set
+            postalAddressDeleteIndicator to true.
+    postalAddressEndDateTimeObject:
+      type: object
+      properties:
+        endDateTime:
+          example: '2000-01-01T23:59:59.000Z'
+          type: string
+          format: date-time
+          nullable: false
+          description: >-
+            Date time the postal address was deleted, returned in the UTC format CCYY-MM-DDThh:mm:ss.sssZ, unless a specific time zone is requested by supplying requestTimeZone. For instance, if "America/New_York" is specified for requestTimeZone, date/time attribute is returned in CCYY-MM-DDThh:mm:ss.sss format, assuming the time zone is EST in the winter and EDT in the summer.
+    postalAddressEndDateTime:
+      type: string
+      format: date-time
+      nullable: false
+      description: >-
+        Date time the postal address was deleted, returned in the UTC format CCYY-MM-DDThh:mm:ss.sssZ, unless a specific time zone is requested by supplying requestTimeZone. For instance, if "America/New_York" is specified for requestTimeZone, date/time attribute is returned in CCYY-MM-DDThh:mm:ss.sss format, assuming the time zone is EST in the winter and EDT in the summer.
+      example: '2000-01-01T23:59:59.000Z'
+    addressLine1:
+      type: string
+      nullable: false
+      example: 12345 Main Street
+      description: Required. The first line of the address.
+    addressLine2Register:
+      type: string
+      nullable: false
+      example: Suite A
+      description: The second line of the address.
+    addressLine2Update:
+      type: string
+      nullable: true
+      example: Suite A
+      description: The second line of the address.
+    addressLine3Register:
+      type: string
+      nullable: false
+      example: PO Box 5678
+      description: The third line of the address.
+    addressLine3Update:
+      type: string
+      nullable: true
+      example: PO Box 5678
+      description: The third line of the address.
+    addressLine4Register:
+      type: string
+      nullable: false
+      example: PO Box 5678
+      description: The fourth line of the address.
+    addressLine4Update:
+      type: string
+      nullable: true
+      example: PO Box 5678
+      description: The fourth line of the address.
+    addressLine5Register:
+      type: string
+      nullable: false
+      example: "ATTN: John Doe"
+      description: The fourth line of the address.
+    addressLine5Update:
+      type: string
+      nullable: true
+      example: "ATTN: John Doe"
+      description: The fourth line of the address.
+    city:
+      type: string
+      nullable: false
+      example: Cleveland
+      description: The city of the address.
+    postalCodeRegister:
+      type: string
+      nullable: false
+      example: '44114'
+      description: The postal code of the address.
+    postalCodeUpdate:
+      type: string
+      nullable: true
+      example: '44114'
+      description: The postal code of the address.
+    countryCodeRegister:
+      type: string
+      nullable: false
+      example: USA
+      description: >-
+        The country code of the address using Country ISO three-letter (alpha-3) code from ISO 3166-1. The valid values are available from the retrievePersonControls API and retrieveOrganizationControls API, countryCodeValidValues[].countryISOalpha3Code. 
+    countryCodeUpdate:
+      type: string
+      nullable: true
+      example: USA
+      description: >- 
+        The country code of the address using Country ISO three-letter (alpha-3) code from ISO 3166-1. The valid values are available from the retrievePersonControls API and retrieveOrganizationControls API, countryCodeValidValues[].countryISOalpha3Code. To delete, set attribute to null.
+    countryName:
+      type: string
+      nullable: true
+      example: UNITED STATES
+      description: Country name description defined in EIS ISO/IRS Country table.
+    emailAddressStandardizationRequiredIndicator:
+      type: boolean
+      example: true
+      nullable: false
+      description: >-
+        Indicates if the email address should be cleansed/standardized. True
+        indicates email address should be cleansed/standardized. False indicates
+        the email address has already been cleansed/standardized and should not
+        be cleansed/standardized.
+    emailAddressRecordedByUserIdentifierRegister:
+      type: string
+      example: PL00000
+      description: >-
+        The user identifier that last recorded the email address revisions. The
+        recorded user may be different than the actual user that maintained the
+        email address attributes via an application that leveraged this API. 
+      nullable: false
+    emailAddressRecordedByUserIdentifierUpdate:
+      type: string
+      example: PL00000
+      description: >-
+        The user identifier that last recorded the email address revisions. The
+        recorded user may be different than the actual user that maintained the
+        email address attributes via an application that leveraged this API. To
+        delete, set attribute to null.
+      nullable: true
+    phoneNumberStandardizationRequiredIndicator:
+      type: boolean
+      example: true
+      nullable: false
+      description: >-
+        Indicates if the phone number should be cleansed/standardized. True
+        indicates phone number should be cleansed/standardized. False indicates
+        the phone number has already been cleansed/standardized and should not
+        be cleansed/standardized.
+    phoneNumberRecordedByUserIdentifierRegister:
+      type: string
+      example: PL00000
+      description: >-
+        The user identifier that last recorded the phone number revisions. The
+        recorded user may be different than the actual user that maintained the
+        phone number attributes via an application that leveraged this API. 
+      nullable: false
+    phoneNumberRecordedByUserIdentifierUpdate:
+      type: string
+      example: PL00000
+      description: >-
+        The user identifier that last recorded the phone number revisions. The
+        recorded user may be different than the actual user that maintained the
+        phone number attributes via an application that leveraged this API. To
+        delete, set attribute to null.
+      nullable: true
+    postalAddressStandardizationRequiredIndicator:
+      type: boolean
+      example: true
+      nullable: false
+      description: >-
+        Indicates if the address should be cleansed/standardized. True indicates
+        address should be cleansed/standardized. False indicates the address has
+        already been cleansed/standardized or it is a vanity address at customer
+        request and should not be cleansed/standardized. By default, if this 
+        attribute is not provided, address will be cleansed/standardized.  
+    documentType:
+      type: string
+      nullable: false
+      example: "001"
+      description: >-
+        KYC Documentary documentary identification document type. Required for a KYC and/or Verification Identification. The valid values for document type are available from the retrievePersonControls API and retrieveOrganizationControls API, kycDocumentaryIdentificationDocumentTypeValidValues[].kycDocumentaryIdentificationDocumentType.
+    documentIdentifierRegister:
+      type: string
+      example: DL111111
+      description: Verification document identification identifier
+      nullable: false
+    documentIdentifierUpdate:
+      type: string
+      example: DL111111
+      description: |-
+        Verification document identification identifier. To delete, set
+          attribute to null.
+      nullable: true
+    issueDateRegister:
+      oneOf:
+        - type: string
+          format: date
+        - type: string
+      example: '2000-01-01'
+      description: >-
+        Verification document issue date. Formats accepted CCYY-MM-DD or
+        YYYY-MM. 
+      nullable: false
+    issueDateUpdate:
+      oneOf:
+        - type: string
+          format: date
+        - type: string
+      example: '2000-01-01'
+      description: |-
+        Verification document issue date. Formats accepted CCYY-MM-DD or
+          YYYY-MM. To delete, set attribute to null.
+      nullable: true
+    expiryDateRegister:
+      oneOf:
+        - type: string
+          format: date
+        - type: string
+      example: '2000-01-01'
+      description: >-
+        Verification document expiration date. Formats accepted CCYY-MM-DD or
+        YYYY-MM.  
+      nullable: false
+    expiryDateUpdate:
+      oneOf:
+        - type: string
+          format: date
+        - type: string
+      example: '2000-01-01'
+      description: >-
+        Verification document expiration date. Formats accepted CCYY-MM-DD or
+        YYYY-MM. To delete, set attribute to null.
+      nullable: true
+    issuingAuthorityRegister:
+      type: string
+      example: Bank of America
+      description: >-
+        KYC Documentary Identification document issuing authority. For example, the company who
+        issued a credit or debit card.  
+      nullable: false
+    issuingAuthorityUpdate:
+      type: string
+      example: Bank of America
+      description: >-
+        KYC Documentary Identification document issuing authority. For example, the company who
+        issued a credit or debit card.  To delete, set attribute to null.
+      nullable: true
+    issuingLocationRegister:
+      type: string
+      example: Pittsburgh
+      description: >-
+        KYC Documentary Identification document issuing location. For example, the city that issued an authorized city ID.
+      nullable: false
+    issuingLocationUpdate:
+      type: string
+      example: Pittsburgh
+      description: >-
+        KYC Documentary Identification document issuing location. For example, the city that issued an authorized city ID. To delete, set attribute to null.
+      nullable: true
+    kycDocumentaryIdentificationDeleteIndicator:
+      type: boolean
+      nullable: false
+      example: false
+      description: >-
+        To delete the KYC Identifier, send the KYC identification
+        information and set kycDocumentaryIdentificationDeleteIndicator to true.
+    kycEndDateTime:
+      type: string
+      format: date-time
+      example: '2000-01-01T23:59:59.001Z'
+      nullable: false
+      description: >-
+        Date/time the KYC identification was deleted, returned in the UTC format CCYY-MM-DDThh:mm:ss.sssZ, unless a specific time zone is requested by supplying requestTimeZone. For instance, if "America/New_York" is specified for requestTimeZone, date/time attribute is returned in CCYY-MM-DDThh:mm:ss.sss format, assuming the time zone is EST in the winter and EDT in the summer.
+    documentTypeDescription:
+      type: string
+      example: "DI/State ID"
+      description: KYC documentary identification document type description.
+    accountTitleLines:
+      type: array
+      description: >-
+        Account title lines. Specify all account title lines even if only one of
+        the lines is being updated. For example, if only line 1 has changed
+        (accountTitleType = LGL_TTL_LN_1), send the updated
+        value(accountTitleLine) with all of the other non-blank unchanged title
+        lines, providing the complete account legal title. The system of record
+        requires all title lines to be updated together.
+      items:
+        type: object
+        properties:
+          accountTitleType:
+            $ref: '#/components/schemas/accountTitleType'
+          accountTitleLine:
+            $ref: '#/components/schemas/accountTitleLine'
+        required:
+          - accountTitleType
+          - accountTitleLine
+    relationshipStartDateTime:
+      type: string
+      format: date-time
+      nullable: false
+      description: >-
+        The effective or start date for the party relationship. If the attribute is not provided during an add, it is defaulted to the system date/time. Input is accepted in UTC format of either CCYY-MM-DDThh:mm:ss.sssZ or CCYY-MM-DDThh:mm:ssZ and attribute is returned in UTC format CCYY-MM-DDThh:mm:ss.sssZ, unless a specific time zone is requested by supplying requestTimeZone. For instance, if "America/New_York" is specified for requestTimeZone, date/time attributes are provided in CCYY-MM-DDThh:mm:ss.sss or CCYY-MM-DDThh:mm:ss format and returned in CCYY-MM-DDThh:mm:ss.sss format, assuming the time zone is EST in the winter and EDT in the summer.
+      example: '2001-11-29T12:15:33.001Z'
+    relationshipEndDateTime:
+      type: string
+      format: date-time
+      nullable: false
+      description: >-
+        Date time the Party relationship was deleted, returned in the UTC format CCYY-MM-DDThh:mm:ss.sssZ, unless a specific time zone is requested by supplying requestTimeZone. For instance, if "America/New_York" is specified for requestTimeZone, date/time attribute is returned in CCYY-MM-DDThh:mm:ss.sss format, assuming the time zone is EST in the winter and EDT in the summer.
+      example: '2000-01-01T23:59:59.002Z'
+    partyToPartyRelationshipType:
+      type: string
+      nullable: false
+      description: >-
+        Party's relationship to another party. The valid values are available from the retrievePersonControls API and retrieveOrganizationControls API, partyToPartyRelationshipTypeValidValues[].partyToPartyRelationshipType.
+      example: 124
+    partyToPartyRelationshipTypeDescription:
+      type: string
+      nullable: false
+      example: "Signer/Owner"
+      description: Party to Party relationship type description.
+    relatedPartyDeleteIndicator:
+      type: boolean
+      nullable: false
+      example: false
+      description: >-
+        To delete the related party, send the related party and set
+        relatedPartyDeleteIndicator to true.
+    accountTitleTypeDescription:
+      type: string
+      nullable: true
+      example: LEGAL TITLE LINE 1
+      description: 'Account Title Type Description. '
+    occupationCodeRegister:
+      type: string
+      nullable: false
+      example: "213"
+      description: >-
+        Occupation code. The valid values are available from the retrievePersonControls API, occupationCodeValidValues[].occupationCode. 
+    occupationCodeUpdate:
+      type: string
+      nullable: true
+      example: "213"
+      description: >-
+        Occupation code. The valid values are available from the retrievePersonControls API, occupationCodeValidValues[].occupationCode. To delete, set attribute to null.
+    occupationName:
+      type: string
+      nullable: true
+      example: ARCHITECT/ENGINEER
+      description: >-
+        Occupation name. 
+    namePrefixRegister:
+      type: string
+      nullable: false
+      description: >-
+        Personal Customer Prefix/Title (e.g. MR, MS, MRS, MISS, DR). The valid values are available from the retrievePersonControls API, namePrefixValidValues[].namePrefix.
+      example: DR
+    namePrefixUpdate:
+      type: string
+      nullable: true
+      description: >-
+        Personal Customer Prefix/Title (e.g. MR, MS, MRS, MISS, DR). The valid values are available from the retrievePersonControls API, namePrefixValidValues[].namePrefix. To delete, set attribute to null.
+      example: DR
+    namePrefixDescription:
+      type: string
+      nullable: true
+      description: >-
+        Personal Customer Prefix Description (e.g. MISTER, MS, MISSES, MISS, DOCTOR)
+      example: DOCTOR
+    nameGenerationRegister:
+      type: string
+      description: >- 
+        Party/Customer Generation (e.g. JR, SR, I, II, III). The valid values are available from the retrievePersonControls API, nameGenerationValidValues[].nameGeneration.
+      example: SR
+    nameGenerationUpdate:
+      type: string
+      description: >-
+        Party/Customer Generation (e.g. JR, SR, I, II, III). The valid values are available from the retrievePersonControls API, nameGenerationValidValues[].nameGeneration. To delete, set attribute to null.
+      example: SR
+    nameGenerationDescription:
+      type: string
+      description: >-
+        Party/Customer Generation (e.g. JUNIOR, SENIOR, The First, The Second,
+        The Third)
+      example: SENIOR
+    minimumBirthDate:
+      description: Minimum Birth Date
+      type: string
+      format: date
+      example: '1900-01-01'
+    maximumBirthDate:
+      description: 'Maximum Birth Date (e.g., cannot be in future)'
+      type: string
+      format: date
+      example: '2025-07-14'
+    minimumDeceasedDate:
+      description: Minimum Deceased Date
+      type: string
+      format: date
+      example: '1900-01-01'
+    maximumDeceasedDate:
+      description: 'Maximum Deceased Date (e.g., cannot be in future)'
+      type: string
+      format: date
+      example: '2020-11-20'
+    minimumGraduationYear:
+      description: Minimum Graduation Year
+      type: string
+      format: date
+      example: '1900'
+    maximumGraduationYear:
+      description: Maximum Graduation Year
+      type: string
+      format: date
+      example: '2030'
+    birthDateRegister:
+      type: string
+      format: date
+      nullable: false
+      example: '2000-01-01'
+      description: Birth date of the party. Cannot be a date greater than the current date.
+    birthDateUpdate:
+      type: string
+      format: date
+      nullable: true
+      example: '2000-01-01'
+      description: >-
+        Birth date of the party. Cannot be a date greater than the current date.
+        To delete a birth date, set birthDate to null.
+    employerNameRegister:
+      type: string
+      nullable: false
+      example: "SEACOAST BANK"
+      description: Name of party employer. Accepts any employer name up to 250 characters.
+    employmentStartDateRegister:
+      type: string
+      nullable: false
+      example: '2023-07-03'
+      description: >-
+        Employment start date of the person party.It is an optional attribute.
+        Format accepted is CCYY-MM-DD. 
+    employerNameUpdate:
+      type: string
+      nullable: true
+      example: "AUTOMATION TECHNOLOGIES CONSULTING INC"
+      description: >-
+        Name of person's employer. Accepts any employer name up to 250
+        characters. To delete an employer name, set employer to null.
+    employmentStartDateUpdate:
+      type: string
+      nullable: true
+      example: '2023-07-03'
+      description: >-
+        Employment start date of the person party.It is an optional attribute.
+        Format accepted is CCYY-MM-DD. To delete the attribute, set it
+        to null.
+    #politicalExposureStatusRegister:
+    #  type: object
+    #  description: Party's political exposure status.
+    #  properties:
+    #    politicalExposureType:
+    #      $ref: '#/components/schemas/politicalExposureTypeRegister'
+    #    lastUpdateUserIdentifier:
+    #      $ref: '#/components/schemas/politicalExposureLastUpdateUserIdentifierRegister'
+    #  required:
+    #    - politicalExposureType
+    #politicalExposureStatusUpdate:
+    #  type: object
+    #  description: Party's political exposure status.
+    #  properties:
+    #    politicalExposureType:
+    #      $ref: '#/components/schemas/politicalExposureTypeUpdate'
+    #    lastUpdateUserIdentifier:
+    #      $ref: '#/components/schemas/politicalExposureLastUpdateUserIdentifierUpdate'
+    #  required:
+    #    - politicalExposureType
+    #politicalExposureTypeRegister:
+    #  type: string
+    #  nullable: false
+    #  example: 'Y'
+    #  description: >-
+    #    Politically Exposed Person (PEP) Type. The valid values are available from the #retrievePersonControls API, politicalExposureTypeValidValues[].politicalExposureType.
+    #politicalExposureTypeDescription:
+    #  type: string
+    #  nullable: false
+    #  example: POLITICALLY EXPOSED PERSON
+    #  description: 'Politically Exposed Person (PEP) Type Description.  '
+    #politicalExposureTypeUpdate:
+    #  type: string
+    #  nullable: true
+    #  example: 'Y'
+    #  description: >-
+    #    Politically Exposed Person (PEP) Type. Example values include: Y = POLITICALLY #EXPOSED PERSON, N = NOT A POLITICALLY EXPOSED PERSON. The valid values are available from #the retrievePersonControls API, politicalExposureTypeValidValues[].politicalExposureType. #To delete, set attribute to null.
+    #politicalExposureLastUpdateUserIdentifierRegister:
+    #  type: string
+    #  nullable: false
+    #  example: PL00000
+    #  description: >-
+    #      The user identifier that last recorded the politically exposed person (PEP) type. The recorded by user identifier may be different than the actual user that maintained the attribute via an application that leveraged this API. In other APIs, this attribute is called recordedByUserIdentifier, whereas in this API is was named lastUpdateUserIdentifer. Retrieve APIs call this attribute recordedByUserIdentifer and the actual user that maintained/supplied the attribute lastUpdateUserIdentifier. In create/update APIs, the lastUpdateUserIdentifier is populated from the header attribute called agentIdentifer. 
+    #politicalExposureLastUpdateUserIdentifierUpdate:
+    #  type: string
+    #  nullable: true
+    #  example: PL00000
+    #  description: >-
+    #      The user identifier that last recorded the politically exposed person (PEP) type. The recorded by user identifier may be different than the actual user that maintained the attribute via an application that leveraged this API. In other APIs, this attribute is called recordedByUserIdentifier, whereas in this API is was named lastUpdateUserIdentifer. Retrieve APIs call this attribute recordedByUserIdentifer and the actual user that maintained/supplied the attribute lastUpdateUserIdentifier. In create/update APIs, the lastUpdateUserIdentifier is populated from the header attribute called agentIdentifer. To delete, set attribute to null.
+    deceasedDateRegister:
+      type: string
+      format: date
+      nullable: false
+      example: '2020-06-30'
+      description: >-
+        Deceased date of the party. Cannot be a date greater than the current
+        date. 
+    deceasedDateUpdate:
+      type: string
+      format: date
+      nullable: true
+      example: '2020-06-30'
+      description: >-
+        Deceased date of the party. Cannot be a date greater than the current
+        date. To delete attribute, set to null.
+    naicsCodeRegister:
+      type: string
+      example: '541512'
+      description: >-
+        Customer's NAICS code. The North American Industry Classification System
+        (NAICS) is a classification of business establishments by type of
+        economic activity. It is used by government and business in Canada,
+        Mexico, and the United States of America. The use of NAICS codes is for
+        businesses, not for individuals. One exception however is the use of the
+        NAICS code for a sole proprietor. The valid values are available from the retrievePersonControls API and retrieveOrganizationControls API, naicsCodeValidValues[].naicsCode.
+      nullable: false
+    naicsCodeUpdate:
+      type: string
+      example: '541512'
+      description: >-
+        Customer's NAICS code. The North American Industry Classification System
+        (NAICS) is a classification of business establishments by type of
+        economic activity. It is used by government and business in Canada,
+        Mexico, and the United States of America. The use of NAICS codes is for
+        businesses, not for individuals. One exception however is the use of the
+        NAICS code for a sole proprietor. The valid values are available from the retrievePersonControls API and retrieveOrganizationControls API, naicsCodeValidValues[].naicsCode. To delete, set attribute to null.
+      nullable: true
+    naicsCodeDescription:
+      type: string
+      example: COMPUTER SYSTEMS DESIGN SERVICES
+      description: NAICS code description.
+    employerTaxIdentifierRegister:
+      type: string
+      example: '342925198'
+      description: Employer tax identification number (EIN).
+      nullable: false
+      x-source-mapping:
+        sourceField: >-
+          /rest/IBSCI/v2/customers/{CIApplNbr} GET Entity/customer/ciCustTaxNbr
+          /rest/IBSCISRH/v4/customers/search/name-address GET Entity/customersLst/ciCustTaxNbr
+        description: >-
+          Return when ciCustTaxCde = F (Federal taxpayer identification number). An EIN (Employer Identification Number) is a type of Federal Taxpayer Identification Number, specifically for businesses and other entities that are required to file various business tax returns.
+    employerTaxIdentifierUpdate:
+      type: string
+      example: '342925198'
+      description: |-
+        Employer tax identification number (EIN). To delete, set
+            employerTaxIdentifier to null.
+      nullable: true
+    employerTaxIdentifierRegularExpression:
+      type: string
+      nullable: false
+      example: >-
+        ^(?!111111111)(?!222222222)(?!333333333)(?!444444444)(?!555555555)(?!666666666)(?!777777777)(?!888888888)(?!999999999)\d{9}$
+      description: >-
+        Employer tax identification number (EIN) regular expression. The regular
+        expression contains the validation rules required to validate the
+        content of the employer tax identifier (e.g., 9 digits excluding any 
+        identifiers that are all the same digit, such as 111111111). 
+    organizationName:
+      type: string
+      nullable: false
+      description: Business/Organization Customer Name
+      example: AUTOMATION TECHNOLOGIES CONSULTING INC
+    nameStandardizationRequiredIndicator:
+      type: boolean
+      nullable: false
+      description: >-
+        Specifies whether name standardization is required. True - name
+        standardization will be performed on name components. False - name
+        standardization will not be performed on name components.
+      example: true
+    relatedPartiesOrganizationName:
+      type: string
+      nullable: false
+      description: Business/Organization Customer Name
+      example: ABC Technology Inc.
+    businessClassificationCodeRegister:
+      type: string
+      example: A10
+      description: >-
+        Business Classification Code is a 2 or 3 character code that identifies the professional activity that an organization is engaged. The valid values are available from the retrieveOrganizationControls API, businessClassificationCodeValidValues[].businessClassificationCode.
+      nullable: false
+    businessClassificationCodeUpdate:
+      type: string
+      example: A10
+      description: >-
+         Business Classification Code is a 2 or 3 character code that identifies the professional activity that an organization is engaged. The valid values are available from the retrieveOrganizationControls API, businessClassificationCodeValidValues[].businessClassificationCode. To delete, set attribute to null.
+      nullable: true
+    businessClassificationCodeDescription:
+      type: string
+      example: INSURANCE
+      description: Business classification code description.
+    organizationNameType:
+      type: string
+      example: LEGAL_TITLE
+      description: >-
+        The type of the organization name. Example values include: LEGAL_TITLE, NAME
+      nullable: false
+    organizationTypeRegister:
+      type: string
+      example: S_CORP
+      description: >-
+        The type of the organization/legal entity type. Example values include: ASSOCIATION, LTD_LBLTY_CMPNY, LTD_PRTNTRSHP, PBLC_CORP, S_CORP, SOLE_PROP. The valid values are available from the retrieveOrganizationControls API, organizationTypeValidValues[].organizationType.
+      nullable: false
+    organizationTypeUpdate:
+      type: string
+      example: S_CORP
+      description: >-
+        The type of the organization/legal entity type. Example values include: ASSOCIATION, LTD_LBLTY_CMPNY, LTD_PRTNTRSHP, PBLC_CORP, S_CORP, SOLE_PROP. The valid values are available from the retrieveOrganizationControls API, organizationTypeValidValues[].organizationType. To delete, set attribute to null.
+      nullable: true
+    organizationTypeDescription:
+      type: string
+      example: S CORPORATION
+      description: Organization type/legal entity type description.
+    establishmentDateRegister:
+      type: string
+      format: date
+      example: '2000-01-01'
+      description: >-
+        Date the Business/Organization established the business in YYYY-MM-DD format. The business/organization may have been established before it was incorporated (i.e., see incoporationDate).
+      nullable: false
+    establishmentDateUpdate:
+      type: string
+      format: date
+      example: '2000-01-01'
+      description: >-
+        Date the Business/Organization established the business in YYYY-MM-DD format. The business/organization may have been established before it was incorporated (i.e., see incoporationDate). To delete, set attribute to null.
+      nullable: true
+    incorporationDateRegister:
+      type: string
+      format: date
+      example: '2000-01-01'
+      description: >-
+        Date the Business/Organization become incorporated in YYYY-MM-DD format. 
+      nullable: false
+    incorporationDateUpdate:
+      type: string
+      format: date
+      example: '2000-01-01'
+      description: >-
+         Date the Business/Organization become incorporated in YYYY-MM-DD format. To delete, set attribute to null.
+      nullable: true
+    minimumEstablishmentDate:
+      description: Minimum Establishment Date
+      type: string
+      format: date
+      example: '1700-01-01'
+    maximumEstablishmentDate:
+      description: 'Maximum Establishment Date (e.g., cannot be in future)'
+      type: string
+      format: date
+      example: '2025-07-18'
+    minimumIncorporationDate:
+      description: Minimum Incorporation Date
+      type: string
+      format: date
+      example: '1700-01-01'
+    maximumIncorporationDate:
+      description: 'Maximum Incorporation Date (e.g., cannot be in future)'
+      type: string
+      format: date
+      example: '2025-07-18'
+    stateProvinceOfIncorporationRegister:
+      type: string
+      example: OH
+      description: >-
+         State/province of incorporation. If the country name of incorporation is in the United States or Canada, the state/province must be  defined. The valid values are available from the retrievePersonControls API, stateProvinceValidValues[].stateProvince.
+      nullable: false
+    stateProvinceOfIncorporationUpdate:
+      type: string
+      example: OH
+      description: >-
+        State/province of incorporation. If the country name of incorporation is in the United States or Canada, the state/province must be  defined. The valid values are available from the retrievePersonControls API, stateProvinceValidValues[].stateProvince. To delete, set attribute to null.
+      nullable: true
+    dunsIdentifierRegister:
+      type: string
+      example: '150483782'
+      description: >-
+        The Dun & Bradstreet D-U-N-S Number is a unique nine-digit identifier
+        for businesses. This number is assigned once the patented identity
+        resolution process, part of our DUNSRight methodology, identifies a
+        company as being unique from any other in the Dun & Bradstreet Data
+        Cloud. The D-U-N-S Number is used as the starting point for any
+        company's Live Business Identity, the most comprehensive and continually
+        updated view of any company in the Data Cloud. D-U-N-S Numbers are often
+        referenced by lenders and potential business partners to help predict
+        the reliability and/or financial stability of the company in question.
+        D-U-N-S, which stands for data universal numbering system, is used to
+        maintain up-to-date and timely information on more than hundreds of
+        millions global businesses. The D-U-N-S Number also enables
+        identification of relationships between corporate entities (hierarchies
+        and linkages), another key element of Live Business Identity and
+        commercial risk assessment practices. 
+      nullable: false
+    dunsIdentifierUpdate:
+      type: string
+      example: '150483782'
+      description: >-
+        The Dun & Bradstreet D-U-N-S Number is a unique nine-digit identifier
+        for businesses. This number is assigned once the patented identity
+        resolution process, part of our DUNSRight methodology, identifies a
+        company as being unique from any other in the Dun & Bradstreet Data
+        Cloud. The D-U-N-S Number is used as the starting point for any
+        company's Live Business Identity, the most comprehensive and continually
+        updated view of any company in the Data Cloud. D-U-N-S Numbers are often
+        referenced by lenders and potential business partners to help predict
+        the reliability and/or financial stability of the company in question.
+        D-U-N-S, which stands for data universal numbering system, is used to
+        maintain up-to-date and timely information on more than hundreds of
+        millions global businesses. The D-U-N-S Number also enables
+        identification of relationships between corporate entities (hierarchies
+        and linkages), another key element of Live Business Identity and
+        commercial risk assessment practices. To delete, set attribute to null.
+      nullable: true
+    customerRelationshipTypeRegister:
+      type: string
+      nullable: false
+      example: CUSTOMER
+      description: >-
+        Identifies the status of the customer relationship. The valid values are available from the retrievePersonControls API, customerRelationshipTypeValidValues[].customerRelationshipType. Valid Values include PROSPECT, CUSTOMER, and EXTERNAL_CONTACT. The valid values are available from the retrievePersonControls API and retrieveOrganizationControls APIs, customerRelationshipTypeValidValues[].customerRelationshipType.
+    customerRelationshipTypeUpdate:
+      type: string
+      nullable: true
+      example: CUSTOMER
+      description: >-
+        Identifies the status of the customer relationship. The valid values are available from the retrievePersonControls API, customerRelationshipTypeValidValues[].customerRelationshipType. Valid Values include PROSPECT, CUSTOMER, and EXTERNAL_CONTACT. The valid values are available from the retrievePersonControls API and retrieveOrganizationControls APIs, customerRelationshipTypeValidValues[].customerRelationshipType.To delete, set attribute to null.
+    customerRelationshipTypeFilter:
+      type: string
+      nullable: false
+      example: "CUSTOMERS_ONLY"
+      description: >-
+        Filter the parties by the status of the customer relationship. The valid values are available from the retrievePersonControls API and retrieveOrganizationControls API, customerRelationshipTypeFilterValidValues[].customerRelationshipTypeFilter. Example values include: ALL, CUSTOMERS_ONLY, CUSTOMERS_AND_PROSPECTS, EXTERNAL_CONTACTS_ONLY,  PROSPECTS_ONLY
+    customerRelationshipTypeDescription:
+      type: string
+      nullable: false
+      example: CUSTOMER
+      description: Customer relationship type/status filter description.
+    searchType:
+      type: string
+      nullable: false
+      example: "PARTIAL"
+      description: Search type (partial, full).
+    searchTypeDescription:
+      type: string
+      nullable: false
+      example: "Partial Search"
+      description: Search type description.
+    customerRelationshipTypeFilterDescription:
+      type: string
+      nullable: false
+      example: "Customers Only"
+      description: Customer relationship type/status description.
+    partyType:
+      description: Party Type
+      type: string
+      nullable: false
+      enum:
+        - PERSON
+        - ORGANIZATION
+      example: PERSON
+    customerSinceDateRegister:
+      type: string
+      format: date
+      nullable: false
+      example: '1993-06-22'
+      description: >-
+        Customer since date reflects the date on which the party was first created in the system of record (FIS). This date does not reflect the date when the party first had a formal party-to-party or account-to-party relationship documented at the bank. Format of CCYY-MM-DD is accepted.
+    customerSinceDateUpdate:
+      type: string
+      format: date
+      nullable: true
+      example: '1993-06-22'
+      description: >-
+        Customer since date reflects the date on which the party was first created in the system of record (FIS). This date does not reflect the date when the party first had a formal party-to-party or account-to-party relationship documented at the bank. Format of CCYY-MM-DD is accepted. To delete, set attribute to null.
+    matchingPartiesSentRecordCount:
+      type: integer
+      nullable: false
+      description: 'Number of matching parties included in the response. '
+      example: 50
+    matchingPartiesMatchedRecordCount:
+      type: integer
+      nullable: false
+      description: >-
+        Total number of matching parties. This count will be greater than or
+        equal to relatedPartiesSentRecordCount. 
+      example: 72
+    matchingPartiesPaginationToken:
+      type: string
+      nullable: false
+      description: >-
+        If more matching parties are available to return, this element will
+        contain the pagination token that the consumer can provide to this API
+        to obtain the next set of matching parties. 
+      example: "Y|||||P|00000028735|SMITH||"
+    matchingPartiesByTaxIdentifierPaginationToken:
+      type: string
+      nullable: false
+      description: >-
+        If more matching parties are available to return, this element will
+        contain the pagination token that the consumer can provide to this API
+        to obtain the next set of matching parties. 
+      example: "Y||000000000|00000007059||"
+    relatedPartiesSentRecordCount:
+      type: integer
+      nullable: false
+      description: 'Number of related parties included in the response. '
+      example: 50
+    relatedPartiesMatchedRecordCount:
+      type: integer
+      nullable: false
+      description: >-
+        Total number of related parties. This count will be greater than or
+        equal to relatedPartiesSentRecordCount. 
+      example: 72
+    relatedPartiesPaginationToken:
+      type: string
+      nullable: false
+      description: >-
+        If more related parties are available to return, this element will
+        contain the pagination token that the consumer can provide to this API
+        to obtain the next set of related parties. 
+      example: 50
+    relatedAccountsSentRecordCount:
+      type: integer
+      nullable: false
+      description: 'Number of related accounts included in the response. '
+      example: 50
+    relatedAccountsMatchedRecordCount:
+      type: integer
+      nullable: false
+      description: >-
+        Total number of related accounts. This count will be greater than or
+        equal to relatedAccountsSentRecordCount. 
+      example: 242
+    relatedAccountsPaginationToken:
+      type: string
+      nullable: false
+      description: >-
+        If more related accounts are available to return, this element will
+        contain the pagination token that the consumer can provide to this API
+        to obtain the next set of related accounts. 
+      example: "DP,3340002482,001,023,901,2023-12-18"
+    emailAddressesSentRecordCount:
+      type: integer
+      nullable: false
+      description: 'Number of email addresses included in the response. '
+      example: 10
+    emailAddressesMatchedRecordCount:
+      type: integer
+      nullable: false
+      description: >-
+        Total number of email addresses. This count will be greater than or
+        equal to sent record count. 
+      example: 12
+    emailAddressesPaginationToken:
+      type: string
+      nullable: false
+      description: >-
+        If more email addresses are available to return, this element will
+        contain the pagination token that the consumer can provide to this API
+        to obtain the next set of email addresses. 
+      example: "WRK,2023-12-18"
+    phonesSentRecordCount:
+      type: integer
+      nullable: false
+      description: 'Number of phones included in the response.'
+      example: 10
+    phonesMatchedRecordCount:
+      type: integer
+      nullable: false
+      description: >-
+        Total number of phones. This count will be greater than or
+        equal to sent record count. 
+      example: 12
+    phonesPaginationToken:
+      type: string
+      nullable: false
+      description: >-
+        If more phones are available to return, this element will
+        contain the pagination token that the consumer can provide to this API
+        to obtain the next set of phones. 
+      example: "WRK,2023-12-18"
+    lastName:
+      type: string
+      nullable: false
+      description: The last name (Surname) of a person party. Last name is required for a person party and cannot be deleted.
+      example: Doe
+    firstNameRegister:
+      type: string
+      nullable: false
+      description: The first name (given name) of a person party
+      example: John
+    firstNameUpdate:
+      type: string
+      nullable: true
+      description: >-
+        The first name (given name) of a person party. To delete, set attribute to null.
+      example: John
+    middleNameRegister:
+      type: string
+      nullable: false
+      description: The middle name of a person party. 
+      example: David
+    middleNameUpdate:
+      type: string
+      nullable: true
+      description: The middle name of a person party. To delete, set attribute to null.
+      example: David
+    nameSuffixRegister:
+      type: string
+      nullable: false
+      description: >- 
+        The name suffix for a person party contains one or more professional suffix or title abbreviations that follows a person's name, indicating their profession, academic achievements, or professional status. Examples include "MD" for medical doctor, "DDS" for Doctor Dental Surgury, "JD" for Juris Doctor, "RN" for Registered Nurse, "CPA" for Certified Public Accountant, "CMA" for Certified Management Accountant, or "MBA" signifies that the person holds a Master of Business Administration degree. The valid values are available from the retrievePersonControls API, nameSuffixValidValues[].nameSuffix.
+      example: MBA
+    nameSuffixUpdate:
+      type: string
+      nullable: true
+      description: >-
+        The name suffix for a person party contains one or more professional suffix or title abbreviations that follows a person's name, indicating their profession, academic achievements, or professional status. Examples include "MD" for medical doctor, "DDS" for Doctor Dental Surgury, "JD" for Juris Doctor, "RN" for Registered Nurse, "CPA" for Certified Public Accountant, "CMA" for Certified Management Accountant, or "MBA" signifies that the person holds a Master of Business Administration degree. The valid values are available from the retrievePersonControls API, nameSuffixValidValues[].nameSuffix. To delete, set attribute to null.
+      example: MBA
+    nameSuffixDescription:
+      type: string
+      nullable: true
+      description: >-
+        The name suffix description for a person party, indicating their profession, academic achievements, or professional status. Examples include "Medical Doctor" for "MD", "Doctor Dental Surgury" for "DDS", "Juris Doctor" for "JD", "Registered Nurse" for "RN", "Certified Public Accountant" for "CPA", "Certified Management Accountant" for "CMA", "Master of Business Administration" for "MBA".
+      example: 'Master of Business Administration'
+    ownershipPercentage:
+      type: number
+      nullable: false
+      description: >-
+        Applicable only for relationship type IS_BENFCL_OWNER. The ownership
+        percentage of the Beneficial Owner.
+      example: 50
+    relationshipPartyTitle:
+      type: string
+      example: CHIEF_FINANCIAL_OFFICER
+      description: >-
+        Relationship party title. The relationship party title is applicable for
+        the controlling party relationship and certain treasury management
+        relationship types. When the relationship type is IS_CNTRLG_PARTY, the
+        valid values are available via
+        retrieveOrganizationControls API, 
+        controllingPartyTitleValidValues[].controllingPartyTitle. When the
+        relationship type is one of the treasury management relationships that
+        allow a relationship party title (e.g. IS_TM_ACCT_AUTH_SIGNER,
+        IS_TM_ACCT_SIGNER, IS_TM_ATSTNG_OFCR, IS_TM_AUTH_SIGNER,
+        IS_TM_CHECK_DLG_AUTH_SIGNER, IS_TM_FX_AUTH_SIGNER,
+        IS_TM_TMS_AUTH_SIGNER), the valid values are available via
+        retrieveOrganizationControls API
+        treasuryManagementAuthorityTitleValidValues[].treasuryManagementAuthorityTitle.
+    partyRelationshipLastUpdateDateTime:
+      description: >-
+        Date/time the party relationship was last updated. Attribute is returned in the UTC format CCYY-MM-DDThh:mm:ss.sssZ, unless a specific time zone is requested by supplying requestTimeZone. For instance, if "America/New_York" is specified for requestTimeZone, date/time attribute is returned in CCYY-MM-DDThh:mm:ss.sss format, assuming the time zone is EST in the winter and EDT in the summer.
+      type: string
+      nullable: false
+      format: date-time
+      example: '2020-03-14T12:59:06.001Z'
+    partyRelationshipLastUpdateUserIdentifier:
+      type: string
+      nullable: false
+      description: The user / process that last updated the relationship
+      example: PLXXXXX
+    timeZone:
+      type: string
+      nullable: false
+      example: "America/New_York"
+      description: >-
+        Time zone values (e.g., America/New_York)
+    timeZoneDescription:
+      type: string
+      nullable: false
+      example: "EST (Winter), EDT (Summer)"
+      description: Time zone description.
+    digitalSignature:
+      type: string
+      nullable: false
+      description: >-
+        A hexadecimal string representing the list of attributes to be requested for each transaction. Once the digital signature (digitalSignature) has been generated, store it in a configuration file or cache so that subsequent calls to the FIS dynamic API  do not need to generate it. The digital signiture is a hashed list of the requested attributes and does not change unless revisions (additions, deletions) change the list. The digital signiture is the same in test and production environments.
+      example: "74 72 61 6e 73 61 63 74 69 6f 6e 54 79 70 65 2c 74 72 61 6e 73 61 63 74 69 6f 6e 43 6f 64 65 2c 74 72 61 6e 73 61 63 74 69 6f 6e 43 6f 64 65 4e 61 6d 65 2c 61 6d 6f 75 6e 74 2c 65 66 66 65 63 74 69 76 65 44 61 74 65 2c 70 6f 73 74 69 6e 67 44 61 74 65 2c 63 6f 6d 70 61 6e 79 49 64 2c 69 6e 64 69 76 69 64 75 61 6c 49 64 2c 61 75 74 6f 6d 61 74 65 64 43 6c 65 61 72 69 6e 67 48 6f 75 73 65 54 72 61 63 65 49 64 2c 64 70 54 78 6e 49 44 2c 70 61 79 65 65 4e 61 6d 65 2c 73 74 61 6e 64 61 72 64 45 6e 74 72 79 43 6c 61 73 73 43 6f 64 65 2c 73 65 63 6f 6e 64 61 72 79 53 74 61 6e 64 61 72 64 45 6e 74 72 79 43 6c 61 73 73 43 6f 64 65 2c 72 75 6e 6e 69 6e 67 42 61 6c 61 6e 63 65 2c 72 65 74 75 72 6e 65 64 49 6e 64 69 63 61 74 6f 72 2c 72 65 74 75 72 6e 65 64 49 74 65 6d 49 6e 64 69 63 61 74 6f 72"
