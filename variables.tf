@@ -1,34 +1,54 @@
+############################################
+# variables.tf
+############################################
+
 variable "resource_group_name" {
-  description = "Resource group that contains the existing APIM instance"
+  description = "Azure Resource Group name where APIM lives"
   type        = string
 }
 
 variable "api_management_name" {
-  description = "Existing Azure API Management service name"
+  description = "Azure API Management service name"
   type        = string
 }
 
-# Jenkins writes bundled YAMLs here; Terraform reads only versioned entrypoints.
-variable "openapi_glob" {
-  description = "Glob for versioned bundled OpenAPI YAMLs"
+variable "spec_folder" {
+  description = "Folder containing OpenAPI spec files"
   type        = string
-  default     = "build/api-bundled/* v*.yaml"
+  default     = "specs"
 }
 
-variable "revision" {
-  description = "APIM API revision (non‑breaking changes)"
-  type        = string
-  default     = "1"
+variable "filename_regex" {
+  description = <<EOT
+Regex with:
+  - group 1: API base name (before ' v<digits>.ya?ml')
+  - group 2: version number (digits)
+Matches filenames like: "Payments v1.yaml" or "Orders v2.yml"
+EOT
+  type    = string
+  default = "^(.*) v([0-9]+)\\.ya?ml$"
 }
 
-variable "api_path_override" {
-  description = "Optional override for API base path (keep version‑neutral; Version Set adds /vN)"
+variable "version_prefix" {
+  description = "Prefix for APIM version string (e.g., 'v' -> v1)"
   type        = string
-  default     = null
+  default     = "v"
 }
 
-variable "service_url" {
-  description = "Optional backend URL (ex: https://myapp.azurewebsites.net)"
+variable "fail_if_no_specs" {
+  description = "Whether to fail the plan if no matching specs are found"
+  type        = bool
+  default     = true
+}
+
+variable "enable_version_set" {
+  description = "Create and attach a Version Set using Segment scheme"
+  type        = bool
+  default     = true
+}
+
+variable "version_set_name" {
+  description = "Display name for the APIM Version Set"
   type        = string
-  default     = null
+  default     = "APIs Version Set"
 }

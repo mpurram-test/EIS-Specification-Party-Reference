@@ -1,9 +1,10 @@
 terraform {
-  required_version = ">= 1.4.0"
+  required_version = ">= 1.5.0"
+
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = ">= 4.55.0"
+      version = "~> 3.110"
     }
   }
 }
@@ -12,84 +13,147 @@ provider "azurerm" {
   features {}
 }
 
-# --- Discover bundled, versioned OpenAPI YAMLs and compute values purely from filename ---
+# -----------------------
+# 1) Discover & Parse
+# -----------------------
 locals {
-  # e.g., build/api-bundled/Party Reference Data Directory - Party EIS v1.yaml
-  versioned_specs = fileset(path.module, var.openapi_glob)
+  # Find versioned specs (skip anything containing 'Definitions')
+  api_files = [
+    for f in fileset(var.spec_folder, "* v*.ya?ml") :
+    f if !regexmatch(".*Definitions.*", f)
+  ]
 
-  # Parse filename -> base name (display), version (vN), slugs, resource name, path
-  apis = {
-    for rel_path in local.versioned_specs : rel_path => {
-      rel_path   = rel_path
-      filename   = basename(rel_path)
+  # Early safety guard (fails on plan if requested and no files are found)
+  _assert_specs_present = (
+    var.fail_if_no_specs && length(local.api_files) == 0
+    ? tobool("No bundled versioned specs found in spec_folder: ${var.spec_folder}")
+    : true
+  )
 
-      # Base display name = filename without trailing " v<digit>.yaml"
-      base_name  = trim(regexreplace(basename(rel_path), "\\s+v\\d+\\.ya?ml$", ""), " ")
+  # Build a map: relpath -> parsed fields
+  parsed = {
+    for relpath in local.api_files :
+    relpath => {
+      base         = basename(relpath)
 
-      # Version = capture "v<digit>" from end of filename
-      version_id = lower(regexreplace(basename(rel_path), ".*\\s(v\\d+)\\.ya?ml$", "$1"))
+      # Extract from filename: group1=name, group2=version num
+      name_raw     = regex(var.filename_regex, basename(relpath))[0] # full match
+      name_group   = regex(var.filename_regex, basename(relpath))[1] # e.g., "Party Reference Data Directory - Party EIS"
+      version_num  = regex(var.filename_regex, basename(relpath))[2] # e.g., "1"
 
-      base_slug  = lower(regexreplace(base_name, "[^a-zA-Z0-9]+", "-"))
-      api_path   = coalesce(var.api_path_override, base_slug)
-      api_name   = "${base_slug}-${version_id}" # unique per version (resource name)
+      # Technical API name (keeps triple-dash effect from " - ")
+      # Steps: spaces -> '-', replace any non [a-z0-9-] with '-', then lowercase
+      api_name = lower(
+        regexreplace(
+          replace(regex(var.filename_regex, basename(relpath))[1], " ", "-"),
+          "[^a-z0-9-]",
+          "-"
+        )
+      )
+
+      # API display name you want to see in APIM:
+      # leading "/" + same normalization used for api_name
+      display_name_prefixed = "/${lower(
+        regexreplace(
+          replace(regex(var.filename_regex, basename(relpath))[1], " ", "-"),
+          "[^a-z0-9-]",
+          "-"
+        )
+      )}"
+
+      # API URL suffix (path) for Segment routing:
+      # Remove the exact token " - Party ", normalize, collapse dashes, trim
+      # Example: "Party Reference Data Directory - Party EIS" -> "party-reference-data-directory-eis"
+      path_suffix = lower(
+        trim(
+          regexreplace(
+            regexreplace(
+              replace(
+                # 1) remove the literal token
+                regex(var.filename_regex, basename(relpath))[1],
+                " - Party ",
+                " "
+              ),
+              # 2) turn one or more spaces into single '-'
+              " +",
+              "-"
+            ),
+            # 3) replace any remaining non [a-z0-9-] with '-'
+            "[^a-z0-9-]",
+            "-"
+          ),
+          "-" # 4) trim leading/trailing dashes
+        )
+      )
+
+      # Human-friendly base (unused in resources; here for reference)
+      display_name = regexreplace(basename(relpath), "\\.ya?ml$", "")
+
+      # APIM version string, e.g., "v1"
+      version      = "${var.version_prefix}${regex(var.filename_regex, basename(relpath))[2]}"
     }
   }
-
-  # One Version Set per logical API (keyed by base_slug)
-  version_sets = {
-    for _, a in local.apis : a.base_slug => a.base_name...
-  }
 }
 
-# --- Version Set per base API (Path/Segment versioning) ---
-# APIM Path/Segment puts /v1/, /v2/ in the URL. [1](https://github.com/hashicorp/terraform-provider-azurerm/issues/8306)
+# -------------------------------------------
+# 2) Optional Version Set (Segment scheme)
+# -------------------------------------------
 resource "azurerm_api_management_api_version_set" "this" {
-  for_each = local.version_sets
-
-  name                = "${each.key}-versions"
+  count               = var.enable_version_set ? 1 : 0
+  name                = "version-set-${var.api_management_name}"
   resource_group_name = var.resource_group_name
   api_management_name = var.api_management_name
-
-  display_name      = each.value[0]       # human-friendly base name
-  versioning_scheme = "Segment"           # /v1/... /v2/...
+  display_name        = var.version_set_name
+  versioning_scheme   = "Segment"
 }
 
-# --- One APIM API per bundled version ---
-# Import OpenAPI YAML using Terraform APIM API "import" (OpenAPI YAML supported). [2](https://stackoverflow.com/questions/61122830/using-terraform-yamldecode-to-access-multi-level-element)
-resource "azurerm_api_management_api" "this" {
-  for_each = local.apis
+# -------------------------------------------
+# 3) One APIM API per spec
+# -------------------------------------------
+resource "azurerm_api_management_api" "apis" {
+  for_each            = local.parsed
 
   name                = each.value.api_name
   resource_group_name = var.resource_group_name
   api_management_name = var.api_management_name
 
-  revision     = var.revision
-  display_name = each.value.base_name
-  path         = each.value.api_path
-  protocols    = ["https"]
+  # Display name like: "/party-reference-data-directory---party-eis"
+  display_name        = each.value.display_name_prefixed
 
-  # Attach to Version Set with filename-derived version
-  version        = each.value.version_id
-  version_set_id = azurerm_api_management_api_version_set.this[each.value.base_slug].id
+  # With "Segment" versioning, APIM route is: /{path}/{version}
+  # Path should be the cleaned suffix like: "party-reference-data-directory-eis"
+  path                = each.value.path_suffix
+  protocols           = ["https"]
+
+  # Attach to version set if enabled
+  version_set_id      = var.enable_version_set && length(azurerm_api_management_api_version_set.this) > 0
+                        ? azurerm_api_management_api_version_set.this[0].id
+                        : null
+  version             = each.value.version
+  revision            = "1"
 
   import {
-    content_format = "openapi"                      # YAML
-    content_value  = file(each.value.rel_path)      # the bundled file content
+    content_format = "openapi+yaml"
+    content_value  = file("${var.spec_folder}/${each.key}")
   }
-
-  # Optional backend URL for APIM to call
-  # service_url = var.service_url
 }
 
-output "deployed_apis" {
-  description = "Summary of deployed APIs"
-  value = {
-    for k, r in azurerm_api_management_api.this :
-    k => {
-      name         = r.name
-      display_name = r.display_name
-      version      = r.version
-      path         = r.path
-    }
-  }
+# -----------------------
+# 4) Helpful Outputs
+# -----------------------
+output "imported_api_names" {
+  description = "APIs created/updated in APIM"
+  value       = [for a in azurerm_api_management_api.apis : a.name]
+}
+
+output "api_count" {
+  description = "Total APIs processed from spec_folder"
+  value       = length(azurerm_api_management_api.apis)
+}
+
+output "version_set_id" {
+  description = "Version set id (if enabled)"
+  value       = var.enable_version_set && length(azurerm_api_management_api_version_set.this) > 0
+               ? azurerm_api_management_api_version_set.this[0].id
+               : null
 }
