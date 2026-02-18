@@ -1,18 +1,22 @@
 pipeline {
   agent { label 'dev' }
+
   options {
     timestamps()
     disableConcurrentBuilds()
     timeout(time: 60, unit: 'MINUTES')
   }
+
   environment {
-    TF_INPUT         = 'false'
-    TF_IN_AUTOMATION = 'true'
-    RESOURCE_GROUP_NAME_CRED = credentials('stage-apim-rg-name')
-    APIM_NAME_CRED           = credentials('stage-apim-apim-name')
-    TF_DIR = '.'
+    TF_INPUT                 = 'false'
+    TF_IN_AUTOMATION         = 'true'
+    RESOURCE_GROUP_NAME_CRED = credentials('stage-apim-rg-name')     // Secret Text
+    APIM_NAME_CRED           = credentials('stage-apim-apim-name')   // Secret Text
+    TF_DIR                   = '.'
   }
+
   stages {
+
     stage('Preflight: Tooling') {
       steps {
         sh '''
@@ -30,32 +34,22 @@ pipeline {
         '''
       }
     }
+
     stage('Pull Source Control') {
-      when { branch 'dev' }
       steps {
         checkout scm
         sh 'echo "Repo root:" && ls -la'
         sh 'echo "\\nAPI dir:" && ls -la api || { echo "WARNING: api/ not found"; true; }'
       }
     }
-    stage('Compute Build Metadata') {
-      when { branch 'dev' }
-      steps {
-        script {
-          def shortSha = sh(returnStdout: true, script: 'git rev-parse --short HEAD || echo dev').trim()
-          env.SHORT_SHA = shortSha
-          echo "Computed SHORT_SHA=${env.SHORT_SHA}"
-        }
-      }
-    }
+
     stage('Bundle OpenAPI (multi-API)') {
-      when { branch 'dev' }
       steps {
         sh '''
           set -e
           mkdir -p build/api-bundled
 
-          # Only versioned files like "* v1.yaml", "* v2.yaml", etc.; skip *Definitions*
+          # Only versioned files like "* v1.yaml", "* v2.yaml"; skip *Definitions*
           for f in api/*\\ v*.yaml; do
             [ -f "$f" ] || continue
             base="$(basename "$f")"
@@ -78,15 +72,10 @@ pipeline {
           ls -la build/api-bundled || true
         '''
       }
-      post {
-        // Archive bundled specs for audit
-        always {
-          archiveArtifacts artifacts: 'build/api-bundled/*.yaml', fingerprint: true
-        }
-      }
+      // No archiving in this stage, per your request
     }
+
     stage('Redocly Lint (bundled - fail on errors)') {
-      when { branch 'dev' }
       steps {
         script {
           if (sh(script: 'ls build/api-bundled/*\\ v*.yaml >/dev/null 2>&1', returnStatus: true) != 0) {
@@ -106,11 +95,11 @@ pipeline {
         }
       }
     }
+
     stage('Terraform Init/Validate') {
-      when { branch 'dev' }
       steps {
         script {
-          if (env.TF_DIR?.trim() == '') { env.TF_DIR = '.' }
+          if ((env.TF_DIR ?: '').trim() == '') { env.TF_DIR = '.' }
         }
         sh '''
           set -e
@@ -121,8 +110,8 @@ pipeline {
         '''
       }
     }
+
     stage('Terraform Plan') {
-      when { branch 'dev' }
       steps {
         withCredentials([
           string(credentialsId: 'stage-apim-azure-subscription-id', variable: 'ARM_SUBSCRIPTION_ID'),
@@ -150,8 +139,8 @@ pipeline {
         }
       }
     }
-    stage('Terraform Apply)') {
-      when { branch 'dev' }
+
+    stage('Terraform Apply') {
       steps {
         sh '''
           set -e
@@ -161,8 +150,9 @@ pipeline {
       }
     }
   }
+
   post {
-    success { echo "Dev deployment successful. Build: ${BUILD_URL}" }
+    success { echo "Build succeeded. ${BUILD_URL}" }
     failure { echo "Build failed: ${BUILD_URL}" }
   }
 }
