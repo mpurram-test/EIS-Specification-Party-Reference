@@ -58,12 +58,17 @@ pipeline {
             esac
 
             echo "[Bundle] Processing $f"
-            if command -v node >/dev/null 2>&1; then
-              npx -y @redocly/cli@latest redocly bundle "$f" --ext yaml -o "build/api-bundled/$base"
-            elif command -v docker >/dev/null 2>&1; then
-              docker run --rm -v "$PWD":/spec redocly/cli bundle "$f" --ext yaml -o "build/api-bundled/$base"
+
+            if command -v docker >/dev/null 2>&1; then
+              # Docker-first for reliability
+              docker run --rm -v "$PWD":/spec redocly/cli \
+                bundle "$f" --ext yaml -o "build/api-bundled/$base"
+            elif command -v node >/dev/null 2>&1; then
+              # npx fallback (correct syntax: no extra 'redocly' token)
+              npx -y @redocly/cli@latest bundle "$f" --ext yaml -o "build/api-bundled/$base"
+              # Alternatively: npx -y redocly@latest bundle "$f" --ext yaml -o "build/api-bundled/$base"
             else
-              echo "ERROR: Need Node or Docker to run Redocly CLI." >&2
+              echo "ERROR: Need Docker or Node to run Redocly CLI." >&2
               exit 1
             fi
           done
@@ -72,7 +77,7 @@ pipeline {
           ls -la build/api-bundled || true
         '''
       }
-      // No archiving in this stage, per your request
+      // No archiving here per your request
     }
 
     stage('Redocly Lint (bundled - fail on errors)') {
@@ -82,17 +87,18 @@ pipeline {
             error "No bundled versioned specs found in build/api-bundled. Aborting."
           }
 
-          // Use the 'redocly' binary via npx; fallback to Docker
-          def cmdNPX    = 'npx -y @redocly/cli@latest redocly lint "build/api-bundled/* v*.yaml"'
-          // Alternatively: def cmdNPX = 'npx -y redocly@latest lint "build/api-bundled/* v*.yaml"'
+          // Prefer Docker, then fall back to npx with the correct syntax
           def cmdDocker = 'docker run --rm -v "$PWD":/spec redocly/cli lint "build/api-bundled/* v*.yaml"'
+          def cmdNPX    = 'npx -y @redocly/cli@latest lint "build/api-bundled/* v*.yaml"'
+          // Alternative NPX form if you prefer:
+          // def cmdNPX = 'npx -y redocly@latest lint "build/api-bundled/* v*.yaml"'
 
-          if (sh(script: 'command -v node >/dev/null 2>&1', returnStatus: true) == 0) {
-            sh cmdNPX
-          } else if (sh(script: 'command -v docker >/dev/null 2>&1', returnStatus: true) == 0) {
+          if (sh(script: 'command -v docker >/dev/null 2>&1', returnStatus: true) == 0) {
             sh cmdDocker
+          } else if (sh(script: 'command -v node >/dev/null 2>&1', returnStatus: true) == 0) {
+            sh cmdNPX
           } else {
-            error "Neither Node nor Docker found to run Redocly CLI."
+            error "Neither Docker nor Node found to run Redocly CLI."
           }
         }
       }
