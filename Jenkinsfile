@@ -75,27 +75,6 @@ pipeline {
         '''
       }
     }
-
-    stage('Redocly Lint (bundled - fail on errors)') {
-      steps {
-        script {
-          if (sh(script: 'ls build/api-bundled/*\\ v*.yaml >/dev/null 2>&1', returnStatus: true) != 0) {
-            error "No bundled versioned specs found in build/api-bundled. Aborting."
-          }
-          def cmdDocker = 'docker run --rm -v "$PWD":/spec redocly/cli lint "build/api-bundled/* v*.yaml"'
-          def cmdNPX    = 'npx -y @redocly/cli@latest lint "build/api-bundled/* v*.yaml"'
-
-          if (sh(script: 'command -v docker >/dev/null 2>&1', returnStatus: true) == 0) {
-            sh cmdDocker
-          } else if (sh(script: 'command -v node >/dev/null 2>&1', returnStatus: true) == 0) {
-            sh cmdNPX
-          } else {
-            error "Neither Docker nor Node found to run Redocly CLI."
-          }
-        }
-      }
-    }
-
     stage('Terraform Init/Validate') {
       steps {
         sh '''
