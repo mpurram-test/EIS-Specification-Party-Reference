@@ -19,12 +19,12 @@ variable "spec_folder" {
 }
 
 variable "filename_regex" {
-  description = <<EOT
-Regex with:
-  - group 1: API base name (before ' v<digits>.ya?ml')
-  - group 2: version number (digits)
-Matches filenames like: "Payments v1.yaml" or "Orders v2.yml"
-EOT
+  description = <<-EOT
+    Regex with:
+      - group 1: API base name (before ' v<digits>.ya?ml')
+      - group 2: version number (digits)
+    Matches filenames like: "Payments v1.yaml" or "Orders v2.yml"
+  EOT
   type    = string
   default = "^(.*) v([0-9]+)\\.ya?ml$"
 }

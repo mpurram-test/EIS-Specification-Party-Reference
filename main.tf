@@ -23,66 +23,55 @@ locals {
     f if !regexmatch(".*Definitions.*", f)
   ]
 
-  # Early safety guard (fails on plan if requested and no files are found)
-  _assert_specs_present = (
-    var.fail_if_no_specs && length(local.api_files) == 0
-    ? tobool("No bundled versioned specs found in spec_folder: ${var.spec_folder}")
-    : true
-  )
-
-  # Build a map: relpath -> parsed fields
+  # Build a map of parsed fields per file
   parsed = {
     for relpath in local.api_files :
     relpath => {
-      base         = basename(relpath)
+      base = basename(relpath)
 
-      # Extract from filename: group1=name, group2=version num
-      name_raw     = regex(var.filename_regex, basename(relpath))[0] # full match
-      name_group   = regex(var.filename_regex, basename(relpath))[1] # e.g., "Party Reference Data Directory - Party EIS"
-      version_num  = regex(var.filename_regex, basename(relpath))[2] # e.g., "1"
+      # Capture groups from filename using your regex:
+      # groups[0] = base name, groups[1] = version number
+      groups = regex(var.filename_regex, basename(relpath))
 
-      # Technical API name (keeps triple-dash effect from " - ")
-      # Steps: spaces -> '-', replace any non [a-z0-9-] with '-', then lowercase
+      name_group  = local.parsed_dummy[relpath].groups[0] # set via trick below
+      version_num = local.parsed_dummy[relpath].groups[1]
+
+      # Technical API name: spaces -> '-', then strip non [a-z0-9-], lowercase
       api_name = lower(
         regexreplace(
-          replace(regex(var.filename_regex, basename(relpath))[1], " ", "-"),
+          replace(local.parsed_dummy[relpath].groups[0], " ", "-"),
           "[^a-z0-9-]",
           "-"
         )
       )
 
-      # API display name you want to see in APIM:
-      # leading "/" + same normalization used for api_name
+      # API display name you want to see in APIM, prefixed with "/"
       display_name_prefixed = "/${lower(
         regexreplace(
-          replace(regex(var.filename_regex, basename(relpath))[1], " ", "-"),
+          replace(local.parsed_dummy[relpath].groups[0], " ", "-"),
           "[^a-z0-9-]",
           "-"
         )
       )}"
 
       # API URL suffix (path) for Segment routing:
-      # Remove the exact token " - Party ", normalize, collapse dashes, trim
-      # Example: "Party Reference Data Directory - Party EIS" -> "party-reference-data-directory-eis"
+      # Remove the literal token " - Party ", normalize, collapse dashes, trim
       path_suffix = lower(
         trim(
           regexreplace(
             regexreplace(
               replace(
-                # 1) remove the literal token
-                regex(var.filename_regex, basename(relpath))[1],
+                local.parsed_dummy[relpath].groups[0],
                 " - Party ",
                 " "
               ),
-              # 2) turn one or more spaces into single '-'
               " +",
               "-"
             ),
-            # 3) replace any remaining non [a-z0-9-] with '-'
             "[^a-z0-9-]",
             "-"
           ),
-          "-" # 4) trim leading/trailing dashes
+          "-"
         )
       )
 
@@ -90,7 +79,15 @@ locals {
       display_name = regexreplace(basename(relpath), "\\.ya?ml$", "")
 
       # APIM version string, e.g., "v1"
-      version      = "${var.version_prefix}${regex(var.filename_regex, basename(relpath))[2]}"
+      version = "${var.version_prefix}${local.parsed_dummy[relpath].groups[1]}"
+    }
+  }
+
+  # Trick to reference groups above without re-running regex() repeatedly
+  parsed_dummy = {
+    for relpath in local.api_files :
+    relpath => {
+      groups = regex(var.filename_regex, basename(relpath))
     }
   }
 }
@@ -105,6 +102,20 @@ resource "azurerm_api_management_api_version_set" "this" {
   api_management_name = var.api_management_name
   display_name        = var.version_set_name
   versioning_scheme   = "Segment"
+}
+
+# -------------------------------------------
+# 2a) Early failure if no specs (optional but recommended)
+# -------------------------------------------
+resource "null_resource" "ensure_specs_exist" {
+  count = var.fail_if_no_specs ? 1 : 0
+
+  lifecycle {
+    precondition {
+      condition     = length(local.api_files) > 0
+      error_message = "No bundled versioned specs found in spec_folder: ${var.spec_folder}"
+    }
+  }
 }
 
 # -------------------------------------------
@@ -126,11 +137,11 @@ resource "azurerm_api_management_api" "apis" {
   protocols           = ["https"]
 
   # Attach to version set if enabled
-  version_set_id      = var.enable_version_set && length(azurerm_api_management_api_version_set.this) > 0
-                        ? azurerm_api_management_api_version_set.this[0].id
-                        : null
-  version             = each.value.version
-  revision            = "1"
+  # (Safe because the right-hand side is only evaluated when enable_version_set = true)
+  version_set_id = var.enable_version_set ? azurerm_api_management_api_version_set.this[0].id : null
+
+  version  = each.value.version
+  revision = "1"
 
   import {
     content_format = "openapi+yaml"
@@ -153,7 +164,5 @@ output "api_count" {
 
 output "version_set_id" {
   description = "Version set id (if enabled)"
-  value       = var.enable_version_set && length(azurerm_api_management_api_version_set.this) > 0
-               ? azurerm_api_management_api_version_set.this[0].id
-               : null
+  value       = var.enable_version_set ? azurerm_api_management_api_version_set.this[0].id : null
 }
