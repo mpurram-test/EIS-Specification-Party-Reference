@@ -59,7 +59,7 @@ pipeline {
 
             echo "[Bundle] Processing $f"
             if command -v node >/dev/null 2>&1; then
-              npx -y @redocly/cli@latest bundle "$f" --ext yaml -o "build/api-bundled/$base"
+              npx -y @redocly/cli@latest redocly bundle "$f" --ext yaml -o "build/api-bundled/$base"
             elif command -v docker >/dev/null 2>&1; then
               docker run --rm -v "$PWD":/spec redocly/cli bundle "$f" --ext yaml -o "build/api-bundled/$base"
             else
@@ -82,7 +82,9 @@ pipeline {
             error "No bundled versioned specs found in build/api-bundled. Aborting."
           }
 
-          def cmdNPX    = 'npx -y @redocly/cli@latest lint "build/api-bundled/* v*.yaml"'
+          // Use the 'redocly' binary via npx; fallback to Docker
+          def cmdNPX    = 'npx -y @redocly/cli@latest redocly lint "build/api-bundled/* v*.yaml"'
+          // Alternatively: def cmdNPX = 'npx -y redocly@latest lint "build/api-bundled/* v*.yaml"'
           def cmdDocker = 'docker run --rm -v "$PWD":/spec redocly/cli lint "build/api-bundled/* v*.yaml"'
 
           if (sh(script: 'command -v node >/dev/null 2>&1', returnStatus: true) == 0) {
@@ -98,15 +100,12 @@ pipeline {
 
     stage('Terraform Init/Validate') {
       steps {
-        script {
-          if ((env.TF_DIR ?: '').trim() == '') { env.TF_DIR = '.' }
-        }
         sh '''
           set -e
-          echo "[Terraform] Running in: ${TF_DIR}"
-          terraform -chdir="${TF_DIR}" init -input=false
-          terraform -chdir="${TF_DIR}" fmt -check
-          terraform -chdir="${TF_DIR}" validate
+          echo "[Terraform] Running in: ${TF_DIR:-.}"
+          terraform -chdir="${TF_DIR:-.}" init -input=false
+          terraform -chdir="${TF_DIR:-.}" fmt -check
+          terraform -chdir="${TF_DIR:-.}" validate
         '''
       }
     }
@@ -125,7 +124,7 @@ pipeline {
             ls -la "${WORKSPACE}/build/api-bundled" \
               || { echo "ERROR: No bundled specs found"; exit 1; }
 
-            terraform -chdir="${TF_DIR}" plan -input=false \
+            terraform -chdir="${TF_DIR:-.}" plan -input=false \
               -var="resource_group_name=${RESOURCE_GROUP_NAME_CRED}" \
               -var="api_management_name=${APIM_NAME_CRED}" \
               -var="spec_folder=${WORKSPACE}/build/api-bundled" \
@@ -145,7 +144,7 @@ pipeline {
         sh '''
           set -e
           echo "[Apply] Applying plan..."
-          terraform -chdir="${TF_DIR}" apply -input=false -auto-approve tfplan.dev.out
+          terraform -chdir="${TF_DIR:-.}" apply -input=false -auto-approve tfplan.dev.out
         '''
       }
     }
