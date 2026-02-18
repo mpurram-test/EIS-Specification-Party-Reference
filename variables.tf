@@ -15,7 +15,7 @@ variable "api_management_name" {
 variable "spec_folder" {
   description = "Folder containing OpenAPI spec files"
   type        = string
-  default     = "specs"
+  default     = "build/api-bundled/* v*.yaml"
 }
 
 variable "filename_regex" {
