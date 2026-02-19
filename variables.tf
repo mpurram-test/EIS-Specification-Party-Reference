@@ -1,54 +1,40 @@
-############################################
-# variables.tf
-############################################
-
 variable "resource_group_name" {
-  description = "Azure Resource Group name where APIM lives"
+  description = "Azure Resource Group name where APIM lives."
   type        = string
 }
 
 variable "api_management_name" {
-  description = "Azure API Management service name"
+  description = "Azure API Management service name."
   type        = string
 }
 
 variable "spec_folder" {
-  description = "Folder containing OpenAPI spec files"
+  description = "Folder containing OpenAPI spec files (e.g., 'build/api-bundled')."
   type        = string
-  default     = "build/api-bundled/* v*.yaml"
+  default     = "build/api-bundled"
 }
 
 variable "filename_regex" {
-  description = <<-EOT
-    Regex with:
-      - group 1: API base name (before ' v<digits>.ya?ml')
-      - group 2: version number (digits)
-    Matches filenames like: "Payments v1.yaml" or "Orders v2.yml"
-  EOT
-  type    = string
-  default = "^(.*) v([0-9]+)\\.ya?ml$"
+  description = "Regex with group 1 for API name and group 2 for version number."
+  type        = string
+  # This default matches filenames like "My API v1.yaml"
+  default     = "(.*) v([0-9]+(?:\\.[0-9]+)*)"
 }
 
 variable "version_prefix" {
-  description = "Prefix for APIM version string (e.g., 'v' -> v1)"
+  description = "Prefix for APIM version string (e.g., 'v' -> v1)."
   type        = string
   default     = "v"
 }
 
 variable "fail_if_no_specs" {
-  description = "Whether to fail the plan if no matching specs are found"
+  description = "Whether to fail the plan if no matching specs are found."
   type        = bool
   default     = true
 }
 
 variable "enable_version_set" {
-  description = "Create and attach a Version Set using Segment scheme"
+  description = "Create and attach a Version Set. IMPORTANT: This should be true for versioning by URL segment."
   type        = bool
   default     = true
-}
-
-variable "version_set_name" {
-  description = "Display name for the APIM Version Set"
-  type        = string
-  default     = "APIs Version Set"
 }

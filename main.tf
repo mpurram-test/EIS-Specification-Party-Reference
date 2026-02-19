@@ -1,6 +1,5 @@
 terraform {
   required_version = ">= 1.5.0"
-
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
@@ -17,152 +16,128 @@ provider "azurerm" {
 # 1) Discover & Parse
 # -----------------------
 locals {
-  # Find versioned specs (skip anything containing 'Definitions')
-  api_files = [
-    for f in fileset(var.spec_folder, "* v*.ya?ml") :
-    f if !regexmatch(".*Definitions.*", f)
+  spec_folder_path = abspath("${path.root}/${var.spec_folder}")
+  api_files        = [for f in fileset(local.spec_folder_path, "*.y*ml") : f if strcontains(f, " v")]
+
+  # 1. Create a flat list of all parsed APIs. This is unchanged and correct.
+  parsed_apis = [
+    for relpath in local.api_files : {
+      name_part    = regex(var.filename_regex, basename(relpath))[0]
+      version_part = regex(var.filename_regex, basename(relpath))[1]
+      clean_path   = lower(join("-", [for p in split("-", replace(regex(var.filename_regex, basename(relpath))[0], " ", "-")) : p if p != ""]))
+      version_str  = "${var.version_prefix}${regex(var.filename_regex, basename(relpath))[1]}"
+      version_key  = "${lower(join("-", [for p in split("-", replace(regex(var.filename_regex, basename(relpath))[0], " ", "-")) : p if p != ""]))}-${var.version_prefix}${regex(var.filename_regex, basename(relpath))[1]}"
+      original_file = relpath
+    }
   ]
 
-  # Build a map of parsed fields per file
-  parsed = {
-    for relpath in local.api_files :
-    relpath => {
-      base = basename(relpath)
+  # Get a list of the unique, clean family paths (e.g., ["...eis", "...fis"]).
+  unique_family_paths = distinct([for api in local.parsed_apis : api.clean_path])
 
-      # Capture groups from filename using your regex:
-      # groups[0] = base name, groups[1] = version number
-      groups = regex(var.filename_regex, basename(relpath))
-
-      name_group  = local.parsed_dummy[relpath].groups[0] # set via trick below
-      version_num = local.parsed_dummy[relpath].groups[1]
-
-      # Technical API name: spaces -> '-', then strip non [a-z0-9-], lowercase
-      api_name = lower(
-        regexreplace(
-          replace(local.parsed_dummy[relpath].groups[0], " ", "-"),
-          "[^a-z0-9-]",
-          "-"
-        )
-      )
-
-      # API display name you want to see in APIM, prefixed with "/"
-      display_name_prefixed = "/${lower(
-        regexreplace(
-          replace(local.parsed_dummy[relpath].groups[0], " ", "-"),
-          "[^a-z0-9-]",
-          "-"
-        )
-      )}"
-
-      # API URL suffix (path) for Segment routing:
-      # Remove the literal token " - Party ", normalize, collapse dashes, trim
-      path_suffix = lower(
-        trim(
-          regexreplace(
-            regexreplace(
-              replace(
-                local.parsed_dummy[relpath].groups[0],
-                " - Party ",
-                " "
-              ),
-              " +",
-              "-"
-            ),
-            "[^a-z0-9-]",
-            "-"
-          ),
-          "-"
-        )
-      )
-
-      # Human-friendly base (unused in resources; here for reference)
-      display_name = regexreplace(basename(relpath), "\\.ya?ml$", "")
-
-      # APIM version string, e.g., "v1"
-      version = "${var.version_prefix}${local.parsed_dummy[relpath].groups[1]}"
+  # Loop over the UNIQUE paths to build the map, guaranteeing no duplicates.
+  apis_grouped_by_family = {
+    for family_path in local.unique_family_paths :
+    family_path => {
+      # Find the full display name from the first API that matches this family.
+      display_name = [for api in local.parsed_apis : api.name_part if api.clean_path == family_path][0]
+      
+      # Now, build the versions map by filtering all APIs for the current family.
+      versions = {
+        for v in local.parsed_apis :
+        v.version_key => {
+          version_str   = v.version_str
+          original_file = v.original_file
+        } if v.clean_path == family_path # Filter condition
+      }
     }
   }
-
-  # Trick to reference groups above without re-running regex() repeatedly
-  parsed_dummy = {
-    for relpath in local.api_files :
-    relpath => {
-      groups = regex(var.filename_regex, basename(relpath))
-    }
-  }
+  # --- END OF FIX ---
 }
 
 # -------------------------------------------
-# 2) Optional Version Set (Segment scheme)
+# DYNAMIC Version Sets (one per family)
 # -------------------------------------------
 resource "azurerm_api_management_api_version_set" "this" {
-  count               = var.enable_version_set ? 1 : 0
-  name                = "version-set-${var.api_management_name}"
+  for_each            = local.apis_grouped_by_family
+  
+  name                = "vs-${each.key}"
   resource_group_name = var.resource_group_name
   api_management_name = var.api_management_name
-  display_name        = var.version_set_name
+
+  display_name        = each.value.display_name
   versioning_scheme   = "Segment"
 }
 
 # -------------------------------------------
-# 2a) Early failure if no specs (optional but recommended)
+# Fail early guard
 # -------------------------------------------
 resource "null_resource" "ensure_specs_exist" {
   count = var.fail_if_no_specs ? 1 : 0
-
   lifecycle {
     precondition {
       condition     = length(local.api_files) > 0
-      error_message = "No bundled versioned specs found in spec_folder: ${var.spec_folder}"
+      error_message = "No versioned spec files found in folder: ${local.spec_folder_path}"
     }
   }
 }
 
 # -------------------------------------------
-# 3) One APIM API per spec
+# Create one API per version
 # -------------------------------------------
 resource "azurerm_api_management_api" "apis" {
-  for_each            = local.parsed
-
-  name                = each.value.api_name
+  for_each = merge([
+    for clean_path, family_details in local.apis_grouped_by_family : {
+      for version_key, version_details in family_details.versions :
+      version_key => {
+        clean_path    = clean_path
+        display_name  = family_details.display_name
+        version_str   = version_details.version_str
+        original_file = version_details.original_file
+      }
+    }
+  ]...)
+  
   resource_group_name = var.resource_group_name
   api_management_name = var.api_management_name
 
-  # Display name like: "/party-reference-data-directory---party-eis"
-  display_name        = each.value.display_name_prefixed
-
-  # With "Segment" versioning, APIM route is: /{path}/{version}
-  # Path should be the cleaned suffix like: "party-reference-data-directory-eis"
-  path                = each.value.path_suffix
+  name                = each.key
+  display_name        = each.value.display_name
+  path                = each.value.clean_path
   protocols           = ["https"]
-
-  # Attach to version set if enabled
-  # (Safe because the right-hand side is only evaluated when enable_version_set = true)
-  version_set_id = var.enable_version_set ? azurerm_api_management_api_version_set.this[0].id : null
-
-  version  = each.value.version
-  revision = "1"
+  
+  version_set_id      = azurerm_api_management_api_version_set.this[each.value.clean_path].id
+  version             = each.value.version_str
+  
+  revision            = "1"
 
   import {
-    content_format = "openapi+yaml"
-    content_value  = file("${var.spec_folder}/${each.key}")
+    content_format = "openapi"
+    content_value  = file("${local.spec_folder_path}/${each.value.original_file}")
   }
 }
 
 # -----------------------
-# 4) Helpful Outputs
+# Outputs
 # -----------------------
-output "imported_api_names" {
-  description = "APIs created/updated in APIM"
-  value       = [for a in azurerm_api_management_api.apis : a.name]
-}
-
 output "api_count" {
-  description = "Total APIs processed from spec_folder"
-  value       = length(azurerm_api_management_api.apis)
+  description = "Total API versions processed"
+  value       = length(local.api_files)
 }
 
-output "version_set_id" {
-  description = "Version set id (if enabled)"
-  value       = var.enable_version_set ? azurerm_api_management_api_version_set.this[0].id : null
+output "deployed_version_sets" {
+  description = "A summary of the Version Sets that were created."
+  value       = [for vs in azurerm_api_management_api_version_set.this : { Name = vs.name, DisplayName = vs.display_name }]
+}
+
+output "deployed_api_details" {
+  description = "A summary of the API versions that were deployed."
+  value = {
+    for api in azurerm_api_management_api.apis :
+    api.name => {
+      display_name     = api.display_name
+      version          = api.version
+      path_suffix      = api.path
+      full_example_url = "https://{apim-host}/${api.path}/${api.version}"
+    }
+  }
 }
