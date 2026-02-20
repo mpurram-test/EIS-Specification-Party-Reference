@@ -22,54 +22,52 @@ locals {
   # 1. Create a flat list of all parsed APIs. This is unchanged and correct.
   parsed_apis = [
     for relpath in local.api_files : {
-      name_part    = regex(var.filename_regex, basename(relpath))[0]
-      version_part = regex(var.filename_regex, basename(relpath))[1]
-      clean_path   = lower(join("-", [for p in split("-", replace(regex(var.filename_regex, basename(relpath))[0], " ", "-")) : p if p != ""]))
-      version_str  = "${var.version_prefix}${regex(var.filename_regex, basename(relpath))[1]}"
-      version_key  = "${lower(join("-", [for p in split("-", replace(regex(var.filename_regex, basename(relpath))[0], " ", "-")) : p if p != ""]))}-${var.version_prefix}${regex(var.filename_regex, basename(relpath))[1]}"
+      name_part     = regex(var.filename_regex, basename(relpath))[0]
+      version_part  = regex(var.filename_regex, basename(relpath))[1]
+      clean_path    = lower(join("-", [for p in split("-", replace(regex(var.filename_regex, basename(relpath))[0], " ", "-")) : p if p != ""]))
+      version_str   = "${var.version_prefix}${regex(var.filename_regex, basename(relpath))[1]}"
+      version_key   = "${lower(join("-", [for p in split("-", replace(regex(var.filename_regex, basename(relpath))[0], " ", "-")) : p if p != ""]))}-${var.version_prefix}${regex(var.filename_regex, basename(relpath))[1]}"
       original_file = relpath
     }
   ]
-
-  # Get a list of the unique, clean family paths (e.g., ["...eis", "...fis"]).
+  # 2. Get a list of the unique, clean family paths (e.g., ["...eis", "...fis"]).
   unique_family_paths = distinct([for api in local.parsed_apis : api.clean_path])
 
-  # Loop over the UNIQUE paths to build the map, guaranteeing no duplicates.
+  # 3. Loop over the UNIQUE paths to build the map, guaranteeing no duplicates.
   apis_grouped_by_family = {
     for family_path in local.unique_family_paths :
     family_path => {
       # Find the full display name from the first API that matches this family.
       display_name = [for api in local.parsed_apis : api.name_part if api.clean_path == family_path][0]
-      
+
       # Now, build the versions map by filtering all APIs for the current family.
       versions = {
         for v in local.parsed_apis :
         v.version_key => {
           version_str   = v.version_str
           original_file = v.original_file
-        } if v.clean_path == family_path # Filter condition
+        } if v.clean_path == family_path
       }
     }
   }
-  # --- END OF FIX ---
 }
 
 # -------------------------------------------
-# DYNAMIC Version Sets (one per family)
+# 2) DYNAMIC Version Sets (one per family)
 # -------------------------------------------
 resource "azurerm_api_management_api_version_set" "this" {
-  for_each            = local.apis_grouped_by_family
-  
+  for_each = local.apis_grouped_by_family
+
   name                = "vs-${each.key}"
   resource_group_name = var.resource_group_name
   api_management_name = var.api_management_name
 
-  display_name        = each.value.display_name
-  versioning_scheme   = "Segment"
+  display_name      = each.value.display_name
+  versioning_scheme = "Segment"
 }
 
 # -------------------------------------------
-# Fail early guard
+# 2a) Fail early guard
 # -------------------------------------------
 resource "null_resource" "ensure_specs_exist" {
   count = var.fail_if_no_specs ? 1 : 0
@@ -82,7 +80,7 @@ resource "null_resource" "ensure_specs_exist" {
 }
 
 # -------------------------------------------
-# Create one API per version
+# 3) Create one API per version
 # -------------------------------------------
 resource "azurerm_api_management_api" "apis" {
   for_each = merge([
@@ -96,19 +94,19 @@ resource "azurerm_api_management_api" "apis" {
       }
     }
   ]...)
-  
+
   resource_group_name = var.resource_group_name
   api_management_name = var.api_management_name
 
-  name                = each.key
-  display_name        = each.value.display_name
-  path                = each.value.clean_path
-  protocols           = ["https"]
-  
-  version_set_id      = azurerm_api_management_api_version_set.this[each.value.clean_path].id
-  version             = each.value.version_str
-  
-  revision            = "1"
+  name         = each.key
+  display_name = each.value.display_name
+  path         = each.value.clean_path
+  protocols    = ["https"]
+
+  version_set_id = azurerm_api_management_api_version_set.this[each.value.clean_path].id
+  version        = each.value.version_str
+
+  revision = "1"
 
   import {
     content_format = "openapi"
@@ -117,7 +115,7 @@ resource "azurerm_api_management_api" "apis" {
 }
 
 # -----------------------
-# Outputs
+# 4) Outputs
 # -----------------------
 output "api_count" {
   description = "Total API versions processed"

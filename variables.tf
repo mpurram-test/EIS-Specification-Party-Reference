@@ -18,7 +18,7 @@ variable "filename_regex" {
   description = "Regex with group 1 for API name and group 2 for version number."
   type        = string
   # This default matches filenames like "My API v1.yaml"
-  default     = "(.*) v([0-9]+(?:\\.[0-9]+)*)"
+  default = "(.*) v([0-9]+(?:\\.[0-9]+)*)"
 }
 
 variable "version_prefix" {
