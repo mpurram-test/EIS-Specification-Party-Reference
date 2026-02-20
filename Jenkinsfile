@@ -138,7 +138,6 @@ pipeline {
             terraform -chdir="${TF_DIR:-.}" plan -input=false -no-color \
               -var="resource_group_name=${RESOURCE_GROUP_NAME_CRED}" \
               -var="api_management_name=${APIM_NAME_CRED}" \
-              -var="spec_folder=${WORKSPACE}/build/api-bundled" \
               -out=tfplan.dev.out
           '''
         }
