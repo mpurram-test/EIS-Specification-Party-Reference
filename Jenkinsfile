@@ -20,7 +20,9 @@ pipeline {
     stage('Preflight: Tooling') {
       steps {
         sh '''
+          #!/usr/bin/env bash
           set -e
+          set -x
           echo "[Preflight] Checking required tools on agent..."
           if ! command -v docker >/dev/null 2>&1 && ! command -v node >/dev/null 2>&1; then
             echo "ERROR: Need either Docker or Node on the agent to run Redocly CLI."
@@ -38,15 +40,24 @@ pipeline {
     stage('Pull Source Control') {
       steps {
         checkout scm
-        sh 'echo "Repo root:" && ls -la'
-        sh 'echo "\\nAPI dir:" && ls -la api || { echo "WARNING: api/ not found"; true; }'
+        sh '''
+          #!/usr/bin/env bash
+          set -e
+          set -x
+          echo "Repo root:" && ls -la
+          echo ""
+          echo "API dir:" && ls -la api || { echo "WARNING: api/ not found"; true; }
+        '''
       }
     }
 
     stage('Bundle OpenAPI (multi-API)') {
       steps {
         sh '''
+          #!/usr/bin/env bash
           set -e
+          set -x
+
           mkdir -p build/api-bundled
 
           # Only versioned files like "* v1.yaml", "* v2.yaml"; skip *Definitions*
@@ -75,14 +86,35 @@ pipeline {
         '''
       }
     }
+
     stage('Terraform Init/Validate') {
       steps {
         sh '''
+          #!/usr/bin/env bash
           set -e
+          set -x
+
           echo "[Terraform] Running in: ${TF_DIR:-.}"
-          terraform -chdir="${TF_DIR:-.}" init -input=false
-          terraform -chdir="${TF_DIR:-.}" fmt -check
-          terraform -chdir="${TF_DIR:-.}" validate
+
+          # Init with clean logs
+          terraform -chdir="${TF_DIR:-.}" init -input=false -no-color
+          set +e
+          FMT_OUTPUT=$(terraform -chdir="${TF_DIR:-.}" fmt -check -diff -recursive -no-color 2>&1)
+          FMT_STATUS=$?
+          set -e
+
+          if [ "${FMT_STATUS}" -ne 0 ]; then
+            echo "[Terraform] Formatting issues detected (exit ${FMT_STATUS})."
+            echo "----- BEGIN terraform fmt diff -----"
+            echo "${FMT_OUTPUT}"
+            echo "----- END terraform fmt diff -----"
+            echo "Fix locally with:"
+            echo "  terraform -chdir=\\"${TF_DIR:-.}\\" fmt -recursive"
+            exit "${FMT_STATUS}"   # usually 3 for fmt issues
+          fi
+
+          # Validate
+          terraform -chdir="${TF_DIR:-.}" validate -no-color
         '''
       }
     }
@@ -96,12 +128,14 @@ pipeline {
           string(credentialsId: 'stage-apim-azure-tenant',          variable: 'ARM_TENANT_ID')
         ]) {
           sh '''
+            #!/usr/bin/env bash
             set -e
-            echo "[Plan] Checking bundled specs exist at: ${WORKSPACE}/build/api-bundled"
-            ls -la "${WORKSPACE}/build/api-bundled" \
-              || { echo "ERROR: No bundled specs found"; exit 1; }
+            set -x
 
-            terraform -chdir="${TF_DIR:-.}" plan -input=false \
+            echo "[Plan] Checking bundled specs exist at: ${WORKSPACE}/build/api-bundled"
+            ls -la "${WORKSPACE}/build/api-bundled" || { echo "ERROR: No bundled specs found"; exit 1; }
+
+            terraform -chdir="${TF_DIR:-.}" plan -input=false -no-color \
               -var="resource_group_name=${RESOURCE_GROUP_NAME_CRED}" \
               -var="api_management_name=${APIM_NAME_CRED}" \
               -var="spec_folder=${WORKSPACE}/build/api-bundled" \
@@ -119,9 +153,12 @@ pipeline {
     stage('Terraform Apply') {
       steps {
         sh '''
+          #!/usr/bin/env bash
           set -e
+          set -x
+
           echo "[Apply] Applying plan..."
-          terraform -chdir="${TF_DIR:-.}" apply -input=false -auto-approve tfplan.dev.out
+          terraform -chdir="${TF_DIR:-.}" apply -input=false -no-color -auto-approve tfplan.dev.out
         '''
       }
     }
