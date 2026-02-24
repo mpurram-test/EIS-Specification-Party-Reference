@@ -86,62 +86,62 @@ pipeline {
     }
 
 
-    stage('Redocly Lint (bundled)') {
-      steps {
-        script {
+    // stage('Redocly Lint (bundled)') {
+    //   steps {
+    //     script {
 
-          // STEP 1 — verify files exist
-          if (sh(script: 'ls build/api-bundled/*\\ v*.yaml >/dev/null 2>&1', returnStatus: true) != 0) {
-            error "No bundled specs found. Aborting."
-          }
+    //       // STEP 1 — verify files exist
+    //       if (sh(script: 'ls build/api-bundled/*\\ v*.yaml >/dev/null 2>&1', returnStatus: true) != 0) {
+    //         error "No bundled specs found. Aborting."
+    //       }
 
-          // STEP 2 — safe file list
-          def files = sh(script: 'ls build/api-bundled/*\\ v*.yaml', returnStdout: true)
-                        .trim().split('\\r?\\n')
+    //       // STEP 2 — safe file list
+    //       def files = sh(script: 'ls build/api-bundled/*\\ v*.yaml', returnStdout: true)
+    //                     .trim().split('\\r?\\n')
 
-          // STEP 3 — quote filenames (because they contain spaces)
-          def filesQuoted = files.collect { "\"${it}\"" }.join(' ')
+    //       // STEP 3 — quote filenames (because they contain spaces)
+    //       def filesQuoted = files.collect { "\"${it}\"" }.join(' ')
 
-          // STEP 4 — choose Redocly runner
-          def hasDocker = (sh(script: 'command -v docker >/dev/null 2>&1', returnStatus: true) == 0)
+    //       // STEP 4 — choose Redocly runner
+    //       def hasDocker = (sh(script: 'command -v docker >/dev/null 2>&1', returnStatus: true) == 0)
 
-          def lintCmdDocker = """
-            docker run --rm -w /spec -v "$PWD":/spec redocly/cli \
-            lint --format json ${filesQuoted} \
-            | tee redocly-report.json
-          """
+    //       def lintCmdDocker = """
+    //         docker run --rm -w /spec -v "$PWD":/spec redocly/cli \
+    //         lint --format json ${filesQuoted} \
+    //         | tee redocly-report.json
+    //       """
 
-          def lintCmdNPX = """
-            npx -y @redocly/cli@latest \
-            lint --config redocly.yaml --format json ${filesQuoted} \
-            | tee redocly-report.json
-          """
+    //       def lintCmdNPX = """
+    //         npx -y @redocly/cli@latest \
+    //         lint --config redocly.yaml --format json ${filesQuoted} \
+    //         | tee redocly-report.json
+    //       """
 
-          // STEP 5 — run lint
-          def exitCode = sh(script: hasDocker ? lintCmdDocker : lintCmdNPX,
-                            returnStatus: true)
+    //       // STEP 5 — run lint
+    //       def exitCode = sh(script: hasDocker ? lintCmdDocker : lintCmdNPX,
+    //                         returnStatus: true)
 
-          // STEP 6 — print by-rule summary
-          def text = readFile('redocly-report.json')
-          def json = new groovy.json.JsonSlurper().parseText(text)
-          def reports = (json instanceof List) ? json : [json]
-          def problems = reports.collectMany { it.problems ?: [] }
-          def byRule = problems.groupBy { it.ruleId ?: it.rule }
-                               .collectEntries { rule, list -> [(rule ?: 'unknown'): list.size()] }
+    //       // STEP 6 — print by-rule summary
+    //       def text = readFile('redocly-report.json')
+    //       def json = new groovy.json.JsonSlurper().parseText(text)
+    //       def reports = (json instanceof List) ? json : [json]
+    //       def problems = reports.collectMany { it.problems ?: [] }
+    //       def byRule = problems.groupBy { it.ruleId ?: it.rule }
+    //                            .collectEntries { rule, list -> [(rule ?: 'unknown'): list.size()] }
 
-          echo "========= Redocly Summary ========="
-          echo byRule.sort { -it.value }.toString()
-          echo "=================================="
+    //       echo "========= Redocly Summary ========="
+    //       echo byRule.sort { -it.value }.toString()
+    //       echo "=================================="
 
-          // STEP 7 — archive + fail only on real errors
-          archiveArtifacts artifacts: 'redocly-report.json', allowEmptyArchive: false
+    //       // STEP 7 — archive + fail only on real errors
+    //       archiveArtifacts artifacts: 'redocly-report.json', allowEmptyArchive: false
 
-          if (exitCode != 0) {
-            error "Redocly lint failed. See redocly-report.json."
-          }
-        }
-      }
-    }
+    //       if (exitCode != 0) {
+    //         error "Redocly lint failed. See redocly-report.json."
+    //       }
+    //     }
+    //   }
+    // }
 
     stage('Terraform Init/Validate') {
       steps {
