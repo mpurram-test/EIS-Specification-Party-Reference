@@ -107,7 +107,7 @@ pipeline {
 
           def lintCmdDocker = """
             docker run --rm -w /spec -v "$PWD":/spec redocly/cli \
-            lint --config redocly.yaml --format json ${filesQuoted} \
+            lint --format json ${filesQuoted} \
             | tee redocly-report.json
           """
 
