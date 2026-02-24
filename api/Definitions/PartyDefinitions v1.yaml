@@ -6,6 +6,7 @@ components:
       flows:
         clientCredentials:
           tokenUrl: https://api.dev.seacoastbank.com/auth/v1/token
+          scopes: {} # Required but may be empty
   parameters:
     systemIdentifier:
       name: systemIdentifier
@@ -2377,45 +2378,33 @@ components:
           attribute to null.
       nullable: true
     issueDateRegister:
-      oneOf:
-        - type: string
-          format: date
-        - type: string
+      type: string
+      format: date
+      nullable: false
       example: '2000-01-01'
       description: >-
-        Verification document issue date. Formats accepted CCYY-MM-DD or
-        YYYY-MM. 
-      nullable: false
+        Verification document issue date. Formats accepted CCYY-MM-DD.
     issueDateUpdate:
-      oneOf:
-        - type: string
-          format: date
-        - type: string
+      type: string
+      format: date
+      nullable: true
       example: '2000-01-01'
       description: |-
-        Verification document issue date. Formats accepted CCYY-MM-DD or
-          YYYY-MM. To delete, set attribute to null.
-      nullable: true
+        Verification document issue date. Formats accepted CCYY-MM-DD. To delete, set attribute to null.      
     expiryDateRegister:
-      oneOf:
-        - type: string
-          format: date
-        - type: string
-      example: '2000-01-01'
-      description: >-
-        Verification document expiration date. Formats accepted CCYY-MM-DD or
-        YYYY-MM.  
+      type: string
+      format: date
       nullable: false
-    expiryDateUpdate:
-      oneOf:
-        - type: string
-          format: date
-        - type: string
       example: '2000-01-01'
       description: >-
-        Verification document expiration date. Formats accepted CCYY-MM-DD or
-        YYYY-MM. To delete, set attribute to null.
+        Verification document expiration date. Format accepted CCYY-MM-DD.      
+    expiryDateUpdate:
+      type: string
+      format: date
       nullable: true
+      example: '2000-01-01'
+      description: >-
+        Verification document expiration date. Format accepted CCYY-MM-DD. To delete, set attribute to null.
     issuingAuthorityRegister:
       type: string
       example: Bank of America

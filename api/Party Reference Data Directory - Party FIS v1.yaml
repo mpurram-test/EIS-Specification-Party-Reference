@@ -37,6 +37,10 @@ info:
   x-apiType: Inner
   x-tags: Party
   x-systemOfRecord: FIS
+
+# Root-level security applies to all operations unless overwritten
+security: 
+  - OAuth2: []  
 servers:
   - url: https://api.dev.seacoastbank.com/party-reference-data-directory-fis/v1
     description: Development / Testing Server
@@ -518,7 +522,7 @@ paths:
       tags:
         - retrieve
       summary: >-
-        Retrieve party profilebased upon the supplied customer/party identifier (retrievePartyProfile). The party profile includes the list of related accounts.
+        Retrieve party profile based upon the supplied customer/party identifier (retrievePartyProfile). The party profile includes the list of related accounts.
       description: >-
         Retrieve party profile based upon the supplied customer/party identifier. The party profile includes the list of related accounts. The API will return a maximum number of related accounts per relatedAccountCurrentRecordLimit query parameter as part of one retrieve operation. If more related accounts are available, the API will return a pagination token (paginationToken) to allow the consumer to return the next set of related accounts.
       responses:

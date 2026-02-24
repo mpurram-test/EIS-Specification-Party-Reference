@@ -37,6 +37,10 @@ info:
   x-apiType: Outer
   x-tags: Party
   x-systemOfRecord: EIS
+  
+# Root-level security applies to all operations unless overwritten
+security: 
+  - OAuth2: []  
 servers:
   - url: https://api.dev.seacoastbank.com/party-reference-data-directory-eis/v1
     description: Development / Testing Server
@@ -1159,9 +1163,9 @@ paths:
         #
         #       2.1) if validationOperation is NULL (tag missing or tag supplied with value of null or ""), return all attributes available in the response payload
         #
-        #       2.2) if validationOperation = "VALIDATE_CREATE" or "VALIDATE_UPDATE", retrieve and populate all valid value lists other than searchTypeValidValues, customerRelationshipTypeFilterValidValues, taxIdentifierType
+        #       2.2) if validationOperation = "VALIDATE_CREATE" or "VALIDATE_UPDATE", retrieve and populate all valid value lists other than searchTypeValidValues, customerRelationshipTypeFilterValidValues, taxIdentifierTypeValidValues
         #
-        #       2.3) if validationOperation = "SEARCH", retrieve and populate the valid value lists searchTypeValidValues, customerRelationshipTypeFilterValidValues, taxIdentifierType, stateProvinceValidValues
+        #       2.3) if validationOperation = "SEARCH", retrieve and populate the valid value lists searchTypeValidValues, customerRelationshipTypeFilterValidValues, taxIdentifierTypeValidValues, stateProvinceValidValues
         #
         #       2.4) Retrieve and populate the valid value list timeZoneValidValues regardless of the value of the validationOperation        
         #
@@ -1279,9 +1283,9 @@ paths:
         #
         #       2.1) if validationOperation is NULL (tag missing or tag supplied with value of null or ""), return all attributes available in the response payload
         #
-        #       2.2) if validationOperation = "VALIDATE_CREATE" or "VALIDATE_UPDATE", retrieve and populate all valid value lists other than searchTypeValidValues, customerRelationshipTypeFilterValidValues, taxIdentifierType
+        #       2.2) if validationOperation = "VALIDATE_CREATE" or "VALIDATE_UPDATE", retrieve and populate all valid value lists other than searchTypeValidValues, customerRelationshipTypeFilterValidValues, taxIdentifierTypeValidValues
         #
-        #       2.3) if validationOperation = "SEARCH", retrieve and populate the valid value lists searchTypeValidValues, customerRelationshipTypeFilterValidValues, taxIdentifierType, stateProvinceValidValues
+        #       2.3) if validationOperation = "SEARCH", retrieve and populate the valid value lists searchTypeValidValues, customerRelationshipTypeFilterValidValues, taxIdentifierTypeValidValues, stateProvinceValidValues
         #
         #       2.4) Retrieve and populate the valid value list timeZoneValidValues regardless of the value of the validationOperation        
         #
@@ -1345,6 +1349,7 @@ paths:
               #attributeValue = validationOperation value
               Sample Error Message (Template) = "EIS-Invalid Data: #attributeDescription [#attributePath] #attributeValue is invalid."
               Sample errors/message = "EIS-Invalid Data: Validation operation [validationOperation] #attributeValue is invalid."
+
 components:
   securitySchemes:
     $ref: ./Definitions/PartyDefinitions v1.yaml#/components/securitySchemes

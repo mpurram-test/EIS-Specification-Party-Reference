@@ -10,8 +10,8 @@ pipeline {
   environment {
     TF_INPUT                 = 'false'
     TF_IN_AUTOMATION         = 'true'
-    RESOURCE_GROUP_NAME_CRED = credentials('stage-apim-rg-name')     // Secret Text
-    APIM_NAME_CRED           = credentials('stage-apim-apim-name')   // Secret Text
+    RESOURCE_GROUP_NAME_CRED = credentials('stage-apim-rg-name')
+    APIM_NAME_CRED           = credentials('stage-apim-apim-name')
     TF_DIR                   = '.'
   }
 
@@ -22,20 +22,23 @@ pipeline {
         sh '''
           #!/usr/bin/env bash
           set -e
-          set -x
-          echo "[Preflight] Checking required tools on agent..."
+          echo "[Preflight] Checking required tools..."
+
           if ! command -v docker >/dev/null 2>&1 && ! command -v node >/dev/null 2>&1; then
-            echo "ERROR: Need either Docker or Node on the agent to run Redocly CLI."
+            echo "ERROR: Need Docker or Node to run Redocly CLI."
             exit 1
           fi
+
           if ! command -v terraform >/dev/null 2>&1; then
-            echo "ERROR: Terraform is not installed on this agent."
+            echo "ERROR: Terraform not installed."
             exit 1
           fi
+
           echo "[Preflight] OK"
         '''
       }
     }
+
 
     stage('Pull Source Control') {
       steps {
@@ -43,47 +46,100 @@ pipeline {
         sh '''
           #!/usr/bin/env bash
           set -e
-          set -x
           echo "Repo root:" && ls -la
           echo ""
-          echo "API dir:" && ls -la api || { echo "WARNING: api/ not found"; true; }
+          echo "API dir:" && ls -la api || true
         '''
       }
     }
+
 
     stage('Bundle OpenAPI (multi-API)') {
       steps {
         sh '''
           #!/usr/bin/env bash
           set -e
-          set -x
 
           mkdir -p build/api-bundled
 
-          # Only versioned files like "* v1.yaml", "* v2.yaml"; skip *Definitions*
+          # Pattern only matches versioned API files directly under /api/
+          # It will NOT match anything in api/Definitions/ — so no filter needed.
           for f in api/*\\ v*.yaml; do
             [ -f "$f" ] || continue
-            base="$(basename "$f")"
-            case "$base" in
-              *Definitions* ) echo "Skipping definitions file: $f"; continue ;;
-            esac
 
+            base="$(basename "$f")"
             echo "[Bundle] Processing $f"
 
             if command -v docker >/dev/null 2>&1; then
               docker run --rm -v "$PWD":/spec redocly/cli \
                 bundle "$f" --ext yaml -o "build/api-bundled/$base"
-            elif command -v node >/dev/null 2>&1; then
-              npx -y @redocly/cli@latest bundle "$f" --ext yaml -o "build/api-bundled/$base"
             else
-              echo "ERROR: Need Docker or Node to run Redocly CLI." >&2
-              exit 1
+              npx -y @redocly/cli@latest \
+                bundle "$f" --ext yaml -o "build/api-bundled/$base"
             fi
           done
 
-          echo "[Bundle] Bundled files:"
-          ls -la build/api-bundled || true
+          echo "[Bundle] Results:"
+          ls -la build/api-bundled
         '''
+      }
+    }
+
+
+    stage('Redocly Lint (bundled)') {
+      steps {
+        script {
+
+          // STEP 1 — verify files exist
+          if (sh(script: 'ls build/api-bundled/*\\ v*.yaml >/dev/null 2>&1', returnStatus: true) != 0) {
+            error "No bundled specs found. Aborting."
+          }
+
+          // STEP 2 — safe file list
+          def files = sh(script: 'ls build/api-bundled/*\\ v*.yaml', returnStdout: true)
+                        .trim().split('\\r?\\n')
+
+          // STEP 3 — quote filenames (because they contain spaces)
+          def filesQuoted = files.collect { "\"${it}\"" }.join(' ')
+
+          // STEP 4 — choose Redocly runner
+          def hasDocker = (sh(script: 'command -v docker >/dev/null 2>&1', returnStatus: true) == 0)
+
+          def lintCmdDocker = """
+            docker run --rm -w /spec -v "$PWD":/spec redocly/cli \
+            lint --config redocly.yaml --format json ${filesQuoted} \
+            | tee redocly-report.json
+          """
+
+          def lintCmdNPX = """
+            npx -y @redocly/cli@latest \
+            lint --config redocly.yaml --format json ${filesQuoted} \
+            | tee redocly-report.json
+          """
+
+          // STEP 5 — run lint
+          def exitCode = sh(script: hasDocker ? lintCmdDocker : lintCmdNPX,
+                            returnStatus: true)
+
+          // STEP 6 — print by-rule summary
+          def text = readFile('redocly-report.json')
+          def json = new groovy.json.JsonSlurper().parseText(text)
+          def reports = (json instanceof List) ? json : [json]
+          def problems = reports.collectMany { it.problems ?: [] }
+          def byRule = problems.groupBy { it.ruleId ?: it.rule }
+                               .collectEntries { rule, list -> [(rule ?: 'unknown'): list.size()] }
+
+          echo "========= Redocly Summary ========="
+          echo byRule.sort { -it.value }.toString()
+          echo "=================================="
+
+          // STEP 7 — archive + fail only on real errors
+          archiveArtifacts artifacts: 'redocly-report.json', allowEmptyArchive: false
+
+          if (exitCode != 0) {
+            error "Redocly lint failed. See redocly-report.json."
+          }
+        }
       }
     }
 
@@ -92,7 +148,6 @@ pipeline {
         sh '''
           #!/usr/bin/env bash
           set -e
-          set -x
 
           echo "[Terraform] Running in: ${TF_DIR:-.}"
 
@@ -130,7 +185,6 @@ pipeline {
           sh '''
             #!/usr/bin/env bash
             set -e
-            set -x
 
             echo "[Plan] Checking bundled specs exist at: ${WORKSPACE}/build/api-bundled"
             ls -la "${WORKSPACE}/build/api-bundled" || { echo "ERROR: No bundled specs found"; exit 1; }
@@ -154,7 +208,6 @@ pipeline {
         sh '''
           #!/usr/bin/env bash
           set -e
-          set -x
 
           echo "[Apply] Applying plan..."
           terraform -chdir="${TF_DIR:-.}" apply -input=false -no-color -auto-approve tfplan.dev.out
