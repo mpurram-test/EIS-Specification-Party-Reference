@@ -186,6 +186,7 @@ pipeline {
             terraform -chdir="${TF_DIR:-.}" plan -input=false -no-color \
               -var="resource_group_name=${RESOURCE_GROUP_NAME_CRED}" \
               -var="api_management_name=${APIM_NAME_CRED}" \
+              -var="backend_service_url=https://customer.api.uat.seacoastbank.com" \
               -out=tfplan.out
           '''
         }
