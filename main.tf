@@ -24,8 +24,8 @@ locals {
   ]
   parsed_apis = [
     for relpath in local.api_files : {
-      name_part    = regex(var.filename_regex, basename(relpath))[0]
-      version_part = regex(var.filename_regex, basename(relpath))[1]
+      name_part       = regex(var.filename_regex, basename(relpath))[0]
+      version_part    = regex(var.filename_regex, basename(relpath))[1]
       name_part_clean = trim(regexreplace(name_part, " - .*? Entity", ""))
       clean_path_fallback = lower(
         replace(
@@ -77,7 +77,7 @@ locals {
 # 2) DYNAMIC Version Sets
 
 resource "azurerm_api_management_api_version_set" "this" {
-  for_each = local.apis_grouped_by_family
+  for_each            = local.apis_grouped_by_family
   name                = "vs-${each.key}"
   resource_group_name = var.resource_group_name
   api_management_name = var.api_management_name
@@ -118,12 +118,12 @@ resource "azurerm_api_management_api" "apis" {
   resource_group_name = var.resource_group_name
   api_management_name = var.api_management_name
 
-  name         = each.key
-  display_name = each.value.display_name
-  description  = length(each.value.description) > 0 ? each.value.description : null
-  path         = each.value.api_path
-  protocols    = ["https"]
-  service_url  = var.backend_service_url
+  name           = each.key
+  display_name   = each.value.display_name
+  description    = length(each.value.description) > 0 ? each.value.description : null
+  path           = each.value.api_path
+  protocols      = ["https"]
+  service_url    = var.backend_service_url
   version_set_id = azurerm_api_management_api_version_set.this[each.value.api_path].id
   version        = each.value.version_str
   revision       = "1"
@@ -197,17 +197,17 @@ resource "azurerm_api_management_product_api" "seacoast_internal__fis_v1" {
 resource "azurerm_api_management_subscription" "quavo_sub" {
   resource_group_name = var.resource_group_name
   api_management_name = var.api_management_name
-  display_name = var.subscription_quavo_display
-  state        = "active"
-  product_id   = azurerm_api_management_product.quavo.product_id
+  display_name        = var.subscription_quavo_display
+  state               = "active"
+  product_id          = azurerm_api_management_product.quavo.product_id
 }
 
 resource "azurerm_api_management_subscription" "seacoast_internal_sub" {
   resource_group_name = var.resource_group_name
   api_management_name = var.api_management_name
-  display_name = var.subscription_seacoast_display
-  state        = "active"
-  product_id   = azurerm_api_management_product.seacoast_internal.product_id
+  display_name        = var.subscription_seacoast_display
+  state               = "active"
+  product_id          = azurerm_api_management_product.seacoast_internal.product_id
 }
 
 # -----------------------
