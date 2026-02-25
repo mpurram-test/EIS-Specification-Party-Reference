@@ -1,6 +1,6 @@
 openapi: 3.0.0
 info:
-  title: Party Reference Data Directory - Party (Person, Organization) Entity
+  title: Party Reference Data Directory - Party (Person, Organization) Entity FIS
   version: 1.0.0
   x-versionDetails:
     versionNumber: 1.0.0 
