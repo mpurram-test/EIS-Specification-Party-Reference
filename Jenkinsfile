@@ -8,15 +8,14 @@ pipeline {
   }
 
   environment {
-    TF_INPUT                 = 'false'
-    TF_IN_AUTOMATION         = 'true'
+    TF_INPUT         = 'false'
+    TF_IN_AUTOMATION = 'true'
+    TF_DIR           = '.'
     RESOURCE_GROUP_NAME_CRED = credentials('stage-apim-rg-name')
     APIM_NAME_CRED           = credentials('stage-apim-apim-name')
-    TF_DIR                   = '.'
   }
 
   stages {
-
     stage('Preflight: Tooling') {
       steps {
         sh '''
@@ -39,8 +38,7 @@ pipeline {
       }
     }
 
-
-    stage('Pull Source Control') {
+    stage('Checkout') {
       steps {
         checkout scm
         sh '''
@@ -53,7 +51,6 @@ pipeline {
       }
     }
 
-
     stage('Bundle OpenAPI (multi-API)') {
       steps {
         sh '''
@@ -62,8 +59,7 @@ pipeline {
 
           mkdir -p build/api-bundled
 
-          # Pattern only matches versioned API files directly under /api/
-          # It will NOT match anything in api/Definitions/ — so no filter needed.
+          # Bundle only files like "My API v1.yaml" (space ' v' then version)
           for f in api/*\\ v*.yaml; do
             [ -f "$f" ] || continue
 
@@ -149,10 +145,9 @@ pipeline {
           #!/usr/bin/env bash
           set -e
 
-          echo "[Terraform] Running in: ${TF_DIR:-.}"
-
-          # Init with clean logs
+          echo "[Terraform] Init in: ${TF_DIR:-.}"
           terraform -chdir="${TF_DIR:-.}" init -input=false -no-color
+
           set +e
           FMT_OUTPUT=$(terraform -chdir="${TF_DIR:-.}" fmt -check -diff -recursive -no-color 2>&1)
           FMT_STATUS=$?
@@ -164,11 +159,10 @@ pipeline {
             echo "${FMT_OUTPUT}"
             echo "----- END terraform fmt diff -----"
             echo "Fix locally with:"
-            echo "  terraform -chdir=\\"${TF_DIR:-.}\\" fmt -recursive"
+            echo "  terraform -chdir=\"${TF_DIR:-.}\" fmt -recursive"
             exit "${FMT_STATUS}"   # usually 3 for fmt issues
           fi
 
-          # Validate
           terraform -chdir="${TF_DIR:-.}" validate -no-color
         '''
       }
@@ -192,26 +186,33 @@ pipeline {
             terraform -chdir="${TF_DIR:-.}" plan -input=false -no-color \
               -var="resource_group_name=${RESOURCE_GROUP_NAME_CRED}" \
               -var="api_management_name=${APIM_NAME_CRED}" \
-              -out=tfplan.dev.out
+              -out=tfplan.out
           '''
         }
       }
       post {
         always {
-          archiveArtifacts artifacts: '**/tfplan.dev.out', fingerprint: true
+          archiveArtifacts artifacts: '**/tfplan.out', fingerprint: true
         }
       }
     }
 
     stage('Terraform Apply') {
       steps {
-        sh '''
-          #!/usr/bin/env bash
-          set -e
+        withCredentials([
+          string(credentialsId: 'stage-apim-azure-subscription-id', variable: 'ARM_SUBSCRIPTION_ID'),
+          string(credentialsId: 'stage-apim-azure-client',          variable: 'ARM_CLIENT_ID'),
+          string(credentialsId: 'stage-apim-azure-secret',          variable: 'ARM_CLIENT_SECRET'),
+          string(credentialsId: 'stage-apim-azure-tenant',          variable: 'ARM_TENANT_ID')
+        ]) {
+          sh '''
+            #!/usr/bin/env bash
+            set -e
 
-          echo "[Apply] Applying plan..."
-          terraform -chdir="${TF_DIR:-.}" apply -input=false -no-color -auto-approve tfplan.dev.out
-        '''
+            echo "[Apply] Applying plan..."
+            terraform -chdir="${TF_DIR:-.}" apply -input=false -no-color -auto-approve tfplan.out
+          '''
+        }
       }
     }
   }
