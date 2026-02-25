@@ -38,7 +38,7 @@ variable "backend_service_url" {
 }
 
 variable "product_quavo_id" {
-  description = "URL-safe product identifier for Quavo (e.g., 'quavo')."
+  description = "Product identifier for Quavo."
   type        = string
   default     = "quavo"
 }
@@ -50,7 +50,7 @@ variable "product_quavo_display" {
 }
 
 variable "product_seacoast_id" {
-  description = "URL-safe product identifier for Seacoast Internal (e.g., 'seacoast-internal')."
+  description = "Product identifier for Seacoast Internal."
   type        = string
   default     = "seacoast-internal"
 }
@@ -62,7 +62,7 @@ variable "product_seacoast_display" {
 }
 
 variable "subscription_quavo_name" {
-  description = "Subscription resource name for Quavo (must be unique within APIM)."
+  description = "Subscription resource name for Quavo."
   type        = string
   default     = "quavo-subscription"
 }
@@ -74,7 +74,7 @@ variable "subscription_quavo_display" {
 }
 
 variable "subscription_seacoast_name" {
-  description = "Subscription resource name for Seacoast Internal (must be unique within APIM)."
+  description = "Subscription resource name for Seacoast Internal."
   type        = string
   default     = "seacoast-internal-subscription"
 }
