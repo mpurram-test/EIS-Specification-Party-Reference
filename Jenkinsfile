@@ -1,6 +1,10 @@
 pipeline {
   agent { label 'dev' }
 
+  parameters {
+    choice(name: 'ENV', choices: ['preprod', 'prod'], description: 'Target environment')
+  }
+
   options {
     timestamps()
     disableConcurrentBuilds()
@@ -10,7 +14,6 @@ pipeline {
   environment {
     TF_INPUT         = 'false'
     TF_IN_AUTOMATION = 'true'
-    TF_DIR           = '.'
     RESOURCE_GROUP_NAME_CRED = credentials('stage-apim-rg-name')
     APIM_NAME_CRED           = credentials('stage-apim-apim-name')
   }
@@ -37,7 +40,15 @@ pipeline {
         '''
       }
     }
-
+    stage('Resolve ENV & TF_DIR') {
+      steps {
+        script {
+          env.TF_ENV = params.ENV?.trim() ?: (env.BRANCH_NAME == 'main' ? 'prod' : 'preprod')
+          env.TF_DIR = "terraform/${env.TF_ENV}"   // or "apim/terraform/${env.TF_ENV}" if that’s your path
+          echo "Computed ENV=${env.TF_ENV}  TF_DIR=${env.TF_DIR}"
+        }
+      }
+    }
     stage('Checkout') {
       steps {
         checkout scm
@@ -74,7 +85,8 @@ pipeline {
                 bundle "$f" --ext yaml -o "build/api-bundled/$base"
             fi
           done
-
+          #This ensures the 'jenkins' user can read the files created by the bundler.
+          chown -R jenkins:jenkins build/
           echo "[Bundle] Results:"
           ls -la build/api-bundled
         '''
@@ -186,7 +198,6 @@ pipeline {
             terraform -chdir="${TF_DIR:-.}" plan -input=false -no-color \
               -var="resource_group_name=${RESOURCE_GROUP_NAME_CRED}" \
               -var="api_management_name=${APIM_NAME_CRED}" \
-              -var="backend_service_url=https://customer.api.uat.seacoastbank.com" \
               -out=tfplan.out
           '''
         }

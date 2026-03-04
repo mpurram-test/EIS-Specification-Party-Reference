@@ -1,6 +1,6 @@
 openapi: 3.0.0
 info:
-  title: Party Reference Data Directory - Party (Person, Organization) Entity FIS
+  title: Party Reference Data Directory - FIS Party (Person, Organization) Entity
   version: 1.0.0
   x-versionDetails:
     versionNumber: 1.0.0 
@@ -37,6 +37,9 @@ info:
   x-apiType: Inner
   x-tags: Party
   x-systemOfRecord: FIS
+  x-apimURLsuffix: party-reference-data-directory-fis # Maps to the API URL suffix in APIM
+  x-apimURLversion: v1 # Maps to the API version in APIM
+  x-apimServiceURL: https://customer.api.uat.seacoastbank.com # Maps to the web service URL in APIM
 
 # Root-level security applies to all operations unless overwritten
 security: 
@@ -1424,6 +1427,27 @@ components:
               Return "EXTERNAL_CONTACT" when ciPrspctInd = 'E'
               Return "PROSPECT" when CIPrspctInd = "P"
               Indicates whether this is a customer or a prospect.  Values: C = Customer, E = External Contact, P = Prospect.
+        primaryOfficerIdentifier:
+          $ref: './Definitions/PartyDefinitions v1.yaml#/components/schemas/primaryOfficerIdentifierRegister'
+          x-source-mapping:
+            sourceField: >-
+              /rest/IBSCI/v2/customers/{CIApplNbr} GET Entity/customer/CIPrmyOffcrNbr
+            description: >-
+              Return as string value. Primary officer assigned to the customer, as specified on Officer Segment 110 of Bank Control.
+        secondaryOfficerIdentifier:
+          $ref: './Definitions/PartyDefinitions v1.yaml#/components/schemas/secondaryOfficerIdentifierRegister'
+          x-source-mapping:
+            sourceField: >-
+              /rest/IBSCI/v2/customers/{CIApplNbr} GET Entity/customer/secondaryOfficerIdentifier
+            description: >-
+              Return as string value. Secondary officer assigned to the customer, as specified on Officer Segment 110 of Bank Control.
+        employeeIndicator:
+          $ref: './Definitions/PartyDefinitions v1.yaml#/components/schemas/employeeIndicator'
+          x-source-mapping:
+            sourceField: >-
+              retrieveParty data/employeeIndicator
+            description: >-
+              Return true if CIPrmyOffcrNbr is in the list of officer numbers that are assigned to employees (9901, 9902, 9903). Return false otherwise. 
         phones:
           $ref: '#/components/schemas/phonesForRetrievePartyResponse'
         postalAddressPrimary:

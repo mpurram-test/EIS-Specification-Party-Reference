@@ -1,6 +1,6 @@
 openapi: 3.0.0
 info:
-  title: Party Reference Data Directory - Party (Person, Organization) Entity EIS
+  title: Party Reference Data Directory - EIS Party (Person, Organization) Entity
   version: 1.0.1
   x-versionDetails:
     versionNumber: 1.0.0 
@@ -37,6 +37,10 @@ info:
   x-apiType: Outer
   x-tags: Party
   x-systemOfRecord: EIS
+  x-apimURLsuffix: party-reference-data-directory-eis # Maps to the API URL suffix in APIM
+  x-apimURLversion: v1 # Maps to the API version in APIM
+  x-apimServiceURL: https://customer.api.uat.seacoastbank.com # Maps to the web service URL in APIM
+
   
 # Root-level security applies to all operations unless overwritten
 security: 
@@ -1573,6 +1577,27 @@ components:
           x-source-mapping:
             sourceField: >-
               retrieveParty data/customerRelationshipType
+            description: >-
+              Return as-is from retrieveParty if suppressPartyIndicator = false (or indicator not supplied since false is the default if indicator is not supplied)
+        primaryOfficerIdentifier:
+          $ref: './Definitions/PartyDefinitions v1.yaml#/components/schemas/primaryOfficerIdentifierRegister'
+          x-source-mapping:
+            sourceField: >-
+              retrieveParty data/primaryOfficerIdentifier
+            description: >-
+              Return as-is from retrieveParty if suppressPartyIndicator = false (or indicator not supplied since false is the default if indicator is not supplied)
+        secondaryOfficerIdentifier:
+          $ref: './Definitions/PartyDefinitions v1.yaml#/components/schemas/secondaryOfficerIdentifierRegister'
+          x-source-mapping:
+            sourceField: >-
+              retrieveParty data/secondaryOfficerIdentifier
+            description: >-
+              Return as-is from retrieveParty if suppressPartyIndicator = false (or indicator not supplied since false is the default if indicator is not supplied)
+        employeeIndicator:
+          $ref: './Definitions/PartyDefinitions v1.yaml#/components/schemas/employeeIndicator'
+          x-source-mapping:
+            sourceField: >-
+              retrieveParty data/employeeIndicator
             description: >-
               Return as-is from retrieveParty if suppressPartyIndicator = false (or indicator not supplied since false is the default if indicator is not supplied)
         emailAddressesSentRecordCount:

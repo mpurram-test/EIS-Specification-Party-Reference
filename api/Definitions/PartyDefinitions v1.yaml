@@ -669,9 +669,19 @@ components:
       name: taxIdentifier
       in: header
       description: >-
-        '** MANDATORY FOR SEARCHES BY TAX IDENTIFIER **  Party tax identifier. Tax identifier is required when tax identifier type is supplied as input.'
+        ** MANDATORY FOR SEARCHES BY TAX IDENTIFIER **  Party tax identifier. Tax identifier type is optional. If supplied, API will ensure tax identifier is in valid format for the type of tax identifier.
       required: false
       example: "283551234"
+      schema:
+        type: string
+        nullable: true
+    taxIdentifierLastFour:
+      name: taxIdentifierLastFour
+      in: header
+      description: >-
+        ** OPTIONAL FOR SEARCHES BY PHONE AND Account- **  Last 4 digits of the tax identifier. 
+      required: false
+      example: "1234"
       schema:
         type: string
         nullable: true
@@ -679,7 +689,7 @@ components:
       name: taxIdentifier
       in: header
       description: >-
-        '** MANDATORY FOR SEARCHES BY TAX IDENTIFIER **  Party tax identifier. Tax identifier is required when tax identifier type is supplied as input.'
+        ** MANDATORY FOR SEARCHES BY TAX IDENTIFIER **  Party tax identifier. Tax identifier type is optional. If supplied, API will ensure tax identifier is in valid format for the type of tax identifier.
       required: true
       example: "283551234"
       schema:
@@ -689,7 +699,7 @@ components:
       name: taxIdentifierType
       in: header
       description: >-
-        ** OPTIONAL FOR SEARCHES BY TAX IDENTIFIER **  The type of taxIdentifier. Tax identifier type is optional when tax identifier is supplied as input. If supplied, the API will ensure that the tax identifier is supplied and in the valid format for the type of tax identifier. The valid values are available from the retrievePersonControls API or retrieveOrganizationControls API, taxIdentifierTypeValidValues[].taxIdentifierType. 
+        ** OPTIONAL FOR SEARCHES BY TAX IDENTIFIER **  The type of tax identifier. Tax identifier type is optional when tax identifier is supplied as input. If supplied, the API will ensure that the tax identifier is supplied and in the valid format for the type of tax identifier. The valid values are available from the retrievePersonControls API or retrieveOrganizationControls API, taxIdentifierTypeValidValues[].taxIdentifierType. 
       required: false
       example: "SSN"
       schema:
@@ -703,6 +713,16 @@ components:
          Denotes if a party is an person/individual or organization/business. Valid values are "PERSON" or "ORGANIZATION". If the party type is not supplied as input, the API searches for person/individual parties only (partyType = PERSON). To search for an organization/business, set partyType = "ORGANIZATION". The party type qualifier is not applicable when searching with tax identifier (taxIdentifier).
       required: false
       example: "PERSON"
+      schema:
+        type: string
+        nullable: true
+    phoneNumber:
+      name: phoneNumber
+      in: header
+      description: |-
+        ** MANDATORY WHEN SEARCHING BY PHONE ** Phone Number
+      required: false
+      example: "3303910005"
       schema:
         type: string
         nullable: true
@@ -2926,6 +2946,36 @@ components:
       nullable: false
       example: CUSTOMER
       description: Customer relationship type/status filter description.
+    primaryOfficerIdentifierRegister:
+      type: string
+      nullable: false
+      example: "2582"
+      description: >-
+        Primary officer assigned to the customer.
+    primaryOfficerIdentifierUpdate:
+      type: string
+      nullable: false
+      example: "2582"
+      description: >-
+        Primary officer assigned to the customer. To delete, set attribute to null.
+    secondaryOfficerIdentifierRegister:
+      type: string
+      nullable: false
+      example: "373"
+      description: >-
+        Secondary officer assigned to the customer.
+    secondaryOfficerIdentifierUpdate:
+      type: string
+      nullable: false
+      example: "373"
+      description: >-
+        Secondary officer assigned to the customer. To delete, set attribute to null.
+    employeeIndicator:
+      type: boolean
+      nullable: false
+      example: true
+      description: >-
+        Returns true if the party/customer is an employee of the bank. Returns false if the party/customer is not an employee of the bank.
     searchType:
       type: string
       nullable: false
