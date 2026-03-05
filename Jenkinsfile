@@ -1,9 +1,6 @@
+/* groovylint-disable CompileStatic, DuplicateStringLiteral */
 pipeline {
   agent { label 'dev' }
-
-  parameters {
-    choice(name: 'ENV', choices: ['preprod', 'prod'], description: 'Target environment')
-  }
 
   options {
     timestamps()
@@ -14,8 +11,13 @@ pipeline {
   environment {
     TF_INPUT         = 'false'
     TF_IN_AUTOMATION = 'true'
+    TF_DIR                 = 'terraform'
     RESOURCE_GROUP_NAME_CRED = credentials('stage-apim-rg-name')
     APIM_NAME_CRED           = credentials('stage-apim-apim-name')
+    ARM_SUBSCRIPTION_ID      = credentials('stage-apim-azure-subscription-id')
+    ARM_CLIENT_ID            = credentials('stage-apim-azure-client')
+    ARM_CLIENT_SECRET        = credentials('stage-apim-azure-secret')
+    ARM_TENANT_ID            = credentials('stage-apim-azure-tenant')
   }
 
   stages {
@@ -38,15 +40,6 @@ pipeline {
 
           echo "[Preflight] OK"
         '''
-      }
-    }
-    stage('Resolve ENV & TF_DIR') {
-      steps {
-        script {
-          env.TF_ENV = params.ENV?.trim() ?: (env.BRANCH_NAME == 'main' ? 'prod' : 'preprod')
-          env.TF_DIR = "terraform/${env.TF_ENV}"   // or "apim/terraform/${env.TF_ENV}" if that’s your path
-          echo "Computed ENV=${env.TF_ENV}  TF_DIR=${env.TF_DIR}"
-        }
       }
     }
     stage('Checkout') {
@@ -92,7 +85,6 @@ pipeline {
         '''
       }
     }
-
 
     // stage('Redocly Lint (bundled)') {
     //   steps {
@@ -157,74 +149,107 @@ pipeline {
           #!/usr/bin/env bash
           set -e
 
-          echo "[Terraform] Init in: ${TF_DIR:-.}"
-          terraform -chdir="${TF_DIR:-.}" init -input=false -no-color
+          echo "[Terraform] Init in: $TF_DIR"
+          terraform -chdir="$TF_DIR" init -input=false -no-color
 
           set +e
-          FMT_OUTPUT=$(terraform -chdir="${TF_DIR:-.}" fmt -check -diff -recursive -no-color 2>&1)
+          FMT_OUTPUT=$(terraform -chdir="$TF_DIR" fmt -check -diff -recursive -no-color 2>&1)
           FMT_STATUS=$?
           set -e
 
-          if [ "${FMT_STATUS}" -ne 0 ]; then
-            echo "[Terraform] Formatting issues detected (exit ${FMT_STATUS})."
+          if [ "$FMT_STATUS" -ne 0 ]; then
+            echo "[Terraform] Formatting issues detected (exit $FMT_STATUS)."
             echo "----- BEGIN terraform fmt diff -----"
-            echo "${FMT_OUTPUT}"
+            echo "$FMT_OUTPUT"
             echo "----- END terraform fmt diff -----"
             echo "Fix locally with:"
-            echo "  terraform -chdir=\"${TF_DIR:-.}\" fmt -recursive"
-            exit "${FMT_STATUS}"   # usually 3 for fmt issues
+            echo "  terraform -chdir=\"$TF_DIR\" fmt -recursive"
+            exit "$FMT_STATUS"   # usually 3 for fmt issues
           fi
 
-          terraform -chdir="${TF_DIR:-.}" validate -no-color
+          terraform -chdir="$TF_DIR" validate -no-color
         '''
       }
     }
 
     stage('Terraform Plan') {
       steps {
-        withCredentials([
-          string(credentialsId: 'stage-apim-azure-subscription-id', variable: 'ARM_SUBSCRIPTION_ID'),
-          string(credentialsId: 'stage-apim-azure-client',          variable: 'ARM_CLIENT_ID'),
-          string(credentialsId: 'stage-apim-azure-secret',          variable: 'ARM_CLIENT_SECRET'),
-          string(credentialsId: 'stage-apim-azure-tenant',          variable: 'ARM_TENANT_ID')
-        ]) {
-          sh '''
-            #!/usr/bin/env bash
-            set -e
+        sh '''
+          #!/usr/bin/env bash
+          set -e
 
-            echo "[Plan] Checking bundled specs exist at: ${WORKSPACE}/build/api-bundled"
-            ls -la "${WORKSPACE}/build/api-bundled" || { echo "ERROR: No bundled specs found"; exit 1; }
+          echo "[Plan] Checking bundled specs exist at: $WORKSPACE/build/api-bundled"
+          ls -la "$WORKSPACE/build/api-bundled" || { echo "ERROR: No bundled specs found"; exit 1; }
 
-            terraform -chdir="${TF_DIR:-.}" plan -input=false -no-color \
-              -var="resource_group_name=${RESOURCE_GROUP_NAME_CRED}" \
-              -var="api_management_name=${APIM_NAME_CRED}" \
-              -out=tfplan.out
-          '''
-        }
+          terraform -chdir="$TF_DIR" plan -input=false -no-color -parallelism=1 \
+            -var="resource_group_name=$RESOURCE_GROUP_NAME_CRED" \
+            -var="api_management_name=$APIM_NAME_CRED" \
+            -out=tfplan.out
+        '''
+
+        stash name: 'tfplan', includes: 'terraform/tfplan.out', useDefaultExcludes: false
       }
       post {
         always {
-          archiveArtifacts artifacts: '**/tfplan.out', fingerprint: true
+          archiveArtifacts artifacts: 'terraform/tfplan.out', fingerprint: true, allowEmptyArchive: false
+        }
+      }
+    }
+
+    stage('Approve Apply') {
+      steps {
+        timeout(time: 30, unit: 'MINUTES') {
+          input message: 'Approve Terraform apply to APIM?', ok: 'Apply'
         }
       }
     }
 
     stage('Terraform Apply') {
       steps {
-        withCredentials([
-          string(credentialsId: 'stage-apim-azure-subscription-id', variable: 'ARM_SUBSCRIPTION_ID'),
-          string(credentialsId: 'stage-apim-azure-client',          variable: 'ARM_CLIENT_ID'),
-          string(credentialsId: 'stage-apim-azure-secret',          variable: 'ARM_CLIENT_SECRET'),
-          string(credentialsId: 'stage-apim-azure-tenant',          variable: 'ARM_TENANT_ID')
-        ]) {
-          sh '''
-            #!/usr/bin/env bash
-            set -e
+        unstash 'tfplan'
 
-            echo "[Apply] Applying plan..."
-            terraform -chdir="${TF_DIR:-.}" apply -input=false -no-color -auto-approve tfplan.out
-          '''
-        }
+        sh '''
+          #!/usr/bin/env bash
+          set -e
+
+          echo "[Apply] Applying plan..."
+          terraform -chdir="$TF_DIR" apply -input=false -no-color -parallelism=1 -auto-approve \
+            -var="resource_group_name=$RESOURCE_GROUP_NAME_CRED" \
+            -var="api_management_name=$APIM_NAME_CRED" \
+            tfplan.out
+        '''
+      }
+    }
+
+    stage('Verify APIM Deployment') {
+      steps {
+        sh '''
+          #!/usr/bin/env bash
+          set -e
+
+          echo "[Verify] Running post-apply drift check..."
+
+          set +e
+          terraform -chdir="$TF_DIR" plan -input=false -no-color -detailed-exitcode -parallelism=1 \
+            -var="resource_group_name=$RESOURCE_GROUP_NAME_CRED" \
+            -var="api_management_name=$APIM_NAME_CRED"
+          VERIFY_EXIT=$?
+          set -e
+
+          if [ "$VERIFY_EXIT" -eq 0 ]; then
+            echo "[Verify] No drift detected. Deployment verification passed."
+            exit 0
+          fi
+
+          if [ "$VERIFY_EXIT" -eq 2 ]; then
+            echo "[Verify] Drift detected after apply."
+            echo "[Verify] Expected no pending changes immediately after deployment."
+            exit 1
+          fi
+
+          echo "[Verify] Terraform verification plan failed with exit code $VERIFY_EXIT"
+          exit "$VERIFY_EXIT"
+        '''
       }
     }
   }
@@ -232,5 +257,13 @@ pipeline {
   post {
     success { echo "Build succeeded. ${BUILD_URL}" }
     failure { echo "Build failed: ${BUILD_URL}" }
+    always {
+      sh '''
+        #!/usr/bin/env bash
+        set +e
+        rm -f terraform/tfplan.out terraform/post_apply_verify.out
+        echo "[Cleanup] Removed temporary Terraform plan files"
+      '''
+    }
   }
 }

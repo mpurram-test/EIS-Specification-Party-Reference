@@ -13,13 +13,18 @@ locals {
       original_file       = relpath
       display_name        = try(yamldecode(file("${local.spec_folder_path}/${relpath}")).info.title, "Untitled API")
       description         = try(yamldecode(file("${local.spec_folder_path}/${relpath}")).info.description, "")
-      api_path            = try(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-apim-url-suffix"], "")
-      version_str         = try(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-apim-api-version"], "")
-      dynamic_backend_url = "${trim(try(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-apim-service-url"], ""), "/")}/${try(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-apim-url-suffix"], "")}/${try(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-apim-api-version"], "")}"
-      version_key         = "${try(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-apim-url-suffix"], relpath)}-${try(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-apim-api-version"], "")}"
-      tags                = try([for t in yamldecode(file("${local.spec_folder_path}/${relpath}")).tags : t.name], [])
+      api_path            = try(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-apim-url-suffix"], try(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-apimURLsuffix"], ""))
+      version_str         = try(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-apim-api-version"], try(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-apimURLversion"], ""))
+      dynamic_backend_url = "${trim(try(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-apim-service-url"], try(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-apimServiceURL"], "")), "/")}/${try(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-apim-url-suffix"], try(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-apimURLsuffix"], ""))}/${try(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-apim-api-version"], try(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-apimURLversion"], ""))}"
+      version_key         = "${try(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-apim-url-suffix"], try(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-apimURLsuffix"], relpath))}-${try(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-apim-api-version"], try(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-apimURLversion"], ""))}"
+      tags = try(
+        can(tolist(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-tags"]))
+        ? [for t in tolist(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-tags"]) : trimspace(tostring(t)) if trimspace(tostring(t)) != ""]
+        : [for t in split(",", tostring(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-tags"])) : trimspace(t) if trimspace(t) != ""],
+        try([for t in yamldecode(file("${local.spec_folder_path}/${relpath}")).tags : t.name], [])
+      )
     }
-    if try(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-apim-url-suffix"], "") != ""
+    if try(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-apim-url-suffix"], try(yamldecode(file("${local.spec_folder_path}/${relpath}")).info["x-apimURLsuffix"], "")) != ""
   ]
 
   apis_by_path = { for a in local.parsed : a.api_path => a... }
@@ -42,7 +47,13 @@ locals {
 
 resource "null_resource" "ensure_specs" {
   count = var.fail_if_no_specs ? 1 : 0
-  lifecycle { precondition { condition = length(local.parsed) > 0 error_message = "No OpenAPI specs found in ${local.spec_folder_path}" } }
+
+  lifecycle {
+    precondition {
+      condition     = length(local.parsed) > 0
+      error_message = "No OpenAPI specs found in ${local.spec_folder_path}"
+    }
+  }
 }
 
 resource "azurerm_api_management_api_version_set" "vs" {
@@ -83,14 +94,21 @@ resource "azurerm_api_management_api" "apis" {
   version        = each.value.vstr
   revision       = "1"
 
-  import { content_format = "openapi" content_value = file("${local.spec_folder_path}/${each.value.file}") }
+  import {
+    content_format = "openapi"
+    # Let Terraform own APIM API tags via info.x-tags by stripping x-tags from import payload.
+    content_value = join("\n", [
+      for line in split("\n", file("${local.spec_folder_path}/${each.value.file}")) : line
+      if !startswith(trimspace(line), "x-tags:")
+    ])
+  }
 }
 
 # API Tags: create and assign
 locals {
   tag_pairs = flatten([
     for path, fam in local.families : [
-      for vkey, v in fam.versions : [ for t in v.tags : { api_key = vkey, tag = t } ]
+      for vkey, v in fam.versions : [for t in v.tags : { api_key = vkey, tag = t }]
     ]
   ])
   tag_names = toset([for p in local.tag_pairs : p.tag])
@@ -105,13 +123,14 @@ resource "azurerm_api_management_tag" "tag" {
 
 resource "azurerm_api_management_api_tag" "assign" {
   for_each = { for p in local.tag_pairs : "${p.api_key}|${p.tag}" => p }
-  api_tag_id = azurerm_api_management_tag.tag[each.value.tag].id
-  api_id     = azurerm_api_management_api.apis[each.value.api_key].id
+
+  name   = each.value.tag
+  api_id = azurerm_api_management_api.apis[each.value.api_key].id
 }
 
 # Optional API policy referencing platform fragments
 resource "azurerm_api_management_api_policy" "api_policy" {
-  for_each = var.attach_api_policy ? azurerm_api_management_api.apis : {}
+  for_each            = var.attach_api_policy ? azurerm_api_management_api.apis : {}
   resource_group_name = var.resource_group_name
   api_management_name = var.api_management_name
   api_name            = each.value.name
