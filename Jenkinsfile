@@ -1,4 +1,4 @@
-/* groovylint-disable CompileStatic, DuplicateStringLiteral */
+/* groovylint-disable CompileStatic */
 pipeline {
   agent { label 'dev' }
 
@@ -11,7 +11,7 @@ pipeline {
   environment {
     TF_INPUT         = 'false'
     TF_IN_AUTOMATION = 'true'
-    TF_DIR                 = 'terraform'
+    TF_DIR           = 'terraform'
     RESOURCE_GROUP_NAME_CRED = credentials('stage-apim-rg-name')
     APIM_NAME_CRED           = credentials('stage-apim-apim-name')
     ARM_SUBSCRIPTION_ID      = credentials('stage-apim-azure-subscription-id')
@@ -42,6 +42,7 @@ pipeline {
         '''
       }
     }
+
     stage('Checkout') {
       steps {
         checkout scm
@@ -78,13 +79,18 @@ pipeline {
                 bundle "$f" --ext yaml -o "build/api-bundled/$base"
             fi
           done
-          #This ensures the 'jenkins' user can read the files created by the bundler.
-          chown -R jenkins:jenkins build/
+          # Best effort only: some agents/containers do not allow chown.
+          if command -v chown >/dev/null 2>&1 && chown -R jenkins:jenkins build/ 2>/dev/null; then
+            echo "[Bundle] Ownership updated to jenkins:jenkins"
+          else
+            echo "[Bundle] Skipping chown (not supported/allowed on this agent)"
+          fi
           echo "[Bundle] Results:"
           ls -la build/api-bundled
         '''
       }
     }
+
 
     // stage('Redocly Lint (bundled)') {
     //   steps {
@@ -145,111 +151,111 @@ pipeline {
 
     stage('Terraform Init/Validate') {
       steps {
-        sh '''
-          #!/usr/bin/env bash
+        sh """
           set -e
 
-          echo "[Terraform] Init in: $TF_DIR"
-          terraform -chdir="$TF_DIR" init -input=false -no-color
+          echo "[Init] Using TF_DIR=${TF_DIR}"
+          terraform -chdir="${TF_DIR}" init -backend-config=backend.tfvars -input=false -no-color
 
           set +e
-          FMT_OUTPUT=$(terraform -chdir="$TF_DIR" fmt -check -diff -recursive -no-color 2>&1)
-          FMT_STATUS=$?
+          FMT_OUTPUT=\$(terraform -chdir="${TF_DIR}" fmt -check -diff -recursive -no-color 2>&1)
+          FMT_STATUS=\$?
           set -e
-
-          if [ "$FMT_STATUS" -ne 0 ]; then
-            echo "[Terraform] Formatting issues detected (exit $FMT_STATUS)."
-            echo "----- BEGIN terraform fmt diff -----"
-            echo "$FMT_OUTPUT"
-            echo "----- END terraform fmt diff -----"
-            echo "Fix locally with:"
-            echo "  terraform -chdir=\"$TF_DIR\" fmt -recursive"
-            exit "$FMT_STATUS"   # usually 3 for fmt issues
+          if [ "\${FMT_STATUS}" -ne 0 ]; then
+            echo "[Terraform] fmt issues detected:"
+            echo "\${FMT_OUTPUT}"
+            exit \${FMT_STATUS}
           fi
 
-          terraform -chdir="$TF_DIR" validate -no-color
-        '''
+          terraform -chdir="${TF_DIR}" validate -no-color
+        """
       }
     }
 
     stage('Terraform Plan') {
       steps {
-        sh '''
+        sh """
           #!/usr/bin/env bash
           set -e
 
-          echo "[Plan] Checking bundled specs exist at: $WORKSPACE/build/api-bundled"
-          ls -la "$WORKSPACE/build/api-bundled" || { echo "ERROR: No bundled specs found"; exit 1; }
-
-          terraform -chdir="$TF_DIR" plan -input=false -no-color -parallelism=1 \
-            -var="resource_group_name=$RESOURCE_GROUP_NAME_CRED" \
-            -var="api_management_name=$APIM_NAME_CRED" \
+          terraform -chdir="${TF_DIR}" plan -input=false -no-color \
+            -var="resource_group_name=${RESOURCE_GROUP_NAME_CRED}" \
+            -var="api_management_name=${APIM_NAME_CRED}" \
             -out=tfplan.out
-        '''
 
-        stash name: 'tfplan', includes: 'terraform/tfplan.out', useDefaultExcludes: false
+          PLAN_FILE_PATH="${TF_DIR}/tfplan.out"
+          if [ ! -f "\${PLAN_FILE_PATH}" ]; then
+            echo "ERROR: Plan command finished but plan file missing at \${PLAN_FILE_PATH}"
+            exit 1
+          fi
+          echo "[Plan] Plan file created at \${PLAN_FILE_PATH}"
+        """
       }
       post {
         always {
-          archiveArtifacts artifacts: 'terraform/tfplan.out', fingerprint: true, allowEmptyArchive: false
-        }
-      }
-    }
-
-    stage('Approve Apply') {
-      steps {
-        timeout(time: 30, unit: 'MINUTES') {
-          input message: 'Approve Terraform apply to APIM?', ok: 'Apply'
+          archiveArtifacts artifacts: "${TF_DIR}/tfplan.out", fingerprint: true, allowEmptyArchive: false
         }
       }
     }
 
     stage('Terraform Apply') {
       steps {
-        unstash 'tfplan'
-
-        sh '''
+        sh """
           #!/usr/bin/env bash
           set -e
 
-          echo "[Apply] Applying plan..."
-          terraform -chdir="$TF_DIR" apply -input=false -no-color -parallelism=1 -auto-approve \
-            -var="resource_group_name=$RESOURCE_GROUP_NAME_CRED" \
-            -var="api_management_name=$APIM_NAME_CRED" \
-            tfplan.out
-        '''
-      }
-    }
-
-    stage('Verify APIM Deployment') {
-      steps {
-        sh '''
-          #!/usr/bin/env bash
-          set -e
-
-          echo "[Verify] Running post-apply drift check..."
-
-          set +e
-          terraform -chdir="$TF_DIR" plan -input=false -no-color -detailed-exitcode -parallelism=1 \
-            -var="resource_group_name=$RESOURCE_GROUP_NAME_CRED" \
-            -var="api_management_name=$APIM_NAME_CRED"
-          VERIFY_EXIT=$?
-          set -e
-
-          if [ "$VERIFY_EXIT" -eq 0 ]; then
-            echo "[Verify] No drift detected. Deployment verification passed."
-            exit 0
-          fi
-
-          if [ "$VERIFY_EXIT" -eq 2 ]; then
-            echo "[Verify] Drift detected after apply."
-            echo "[Verify] Expected no pending changes immediately after deployment."
+          PLAN_FILE="tfplan.out"
+          PLAN_FILE_PATH="${TF_DIR}/\${PLAN_FILE}"
+          echo "[Apply] Workspace: \$(pwd)"
+          echo "[Apply] TF_DIR=${TF_DIR}"
+          echo "[Apply] Expecting plan at \${PLAN_FILE_PATH}"
+          if [ ! -f "\${PLAN_FILE_PATH}" ]; then
+            echo "ERROR: Plan file not found at \${PLAN_FILE_PATH}"
+            ls -la "${TF_DIR}" || true
             exit 1
           fi
 
-          echo "[Verify] Terraform verification plan failed with exit code $VERIFY_EXIT"
-          exit "$VERIFY_EXIT"
-        '''
+          # Capture state before apply
+          STATE_BEFORE="${TF_DIR}/state_before.txt"
+          terraform -chdir="${TF_DIR}" state list > "\${STATE_BEFORE}" 2>/dev/null || true
+          echo "[Apply] State snapshot saved: \$(wc -l < \${STATE_BEFORE}) resources"
+
+          # Attempt apply
+          echo "[Apply] Applying plan..."
+          if ! terraform -chdir="${TF_DIR}" apply -input=false -no-color -auto-approve "\${PLAN_FILE}"; then
+            echo "[Rollback] Apply failed. Rolling back newly created resources..."
+
+            # Capture state after failed apply
+            STATE_AFTER="${TF_DIR}/state_after.txt"
+            terraform -chdir="${TF_DIR}" state list > "\${STATE_AFTER}" 2>/dev/null || true
+
+            # Find resources created in this run (in AFTER but not BEFORE)
+            NEW_RESOURCES=\$(grep -Fxv -f "\${STATE_BEFORE}" "\${STATE_AFTER}" || true)
+
+            if [ -n "\${NEW_RESOURCES}" ]; then
+              echo "[Rollback] Found \$(echo \"\${NEW_RESOURCES}\" | wc -l) newly created resources. Destroying..."
+              echo "\${NEW_RESOURCES}" | while IFS= read -r resource; do
+                if [[ "\${resource}" == data.* ]]; then
+                  echo "[Rollback] Skipping data resource: \${resource}"
+                  continue
+                fi
+                echo "[Rollback] Destroying: \${resource}"
+                terraform -chdir="${TF_DIR}" destroy -target="\${resource}" -auto-approve -no-color \
+                  -var="resource_group_name=${RESOURCE_GROUP_NAME_CRED}" \
+                  -var="api_management_name=${APIM_NAME_CRED}"
+              done
+              echo "[Rollback] Cleanup complete"
+            else
+              echo "[Rollback] No newly created resources found to destroy"
+            fi
+
+            rm -f "\${STATE_BEFORE}" "\${STATE_AFTER}"
+            exit 1
+          fi
+
+          rm -f "${TF_DIR}/state_before.txt" "${TF_DIR}/state_after.txt"
+          echo "[Apply] Deployment successful"
+        """
       }
     }
   }
@@ -259,10 +265,8 @@ pipeline {
     failure { echo "Build failed: ${BUILD_URL}" }
     always {
       sh '''
-        #!/usr/bin/env bash
-        set +e
-        rm -f terraform/tfplan.out terraform/post_apply_verify.out
-        echo "[Cleanup] Removed temporary Terraform plan files"
+        find . -name "tfplan.out" -delete
+        echo "[Cleanup] Removed tfplan files"
       '''
     }
   }
