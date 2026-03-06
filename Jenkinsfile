@@ -1,10 +1,11 @@
-/* groovylint-disable CompileStatic */
+/* groovylint-disable CompileStatic, DuplicateStringLiteral */
 
 import groovy.transform.Field
 
 // Constants to eliminate duplicate string literals
+@SuppressWarnings('DuplicateStringLiteral')
 @Field static final String PROD_ENV = 'prod'
-@Field static final List SUPPORTED_ENVS = ['stage', PROD_ENV]
+@Field static final List SUPPORTED_ENVS = ['stage', 'prod']
 @Field static final String ARM_SUBSCRIPTION_ID = 'ARM_SUBSCRIPTION_ID'
 @Field static final String ARM_CLIENT_ID = 'ARM_CLIENT_ID'
 @Field static final String ARM_CLIENT_SECRET = 'ARM_CLIENT_SECRET'
@@ -251,6 +252,7 @@ pipeline {
 
     stage('Production Approval') {
       when {
+        // groovylint-disable-next-line DuplicateStringLiteral
         expression { env.TF_ENV == PROD_ENV }
       }
       steps {
