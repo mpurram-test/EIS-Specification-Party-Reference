@@ -1,24 +1,6 @@
-/* groovylint-disable CompileStatic, DuplicateStringLiteral */
-
-import groovy.transform.Field
-
-// Constants to eliminate duplicate string literals
-@SuppressWarnings('DuplicateStringLiteral')
-@Field static final String PROD_ENV = 'prod'
-@Field static final List SUPPORTED_ENVS = ['stage', 'prod']
-@Field static final String ARM_SUBSCRIPTION_ID = 'ARM_SUBSCRIPTION_ID'
-@Field static final String ARM_CLIENT_ID = 'ARM_CLIENT_ID'
-@Field static final String ARM_CLIENT_SECRET = 'ARM_CLIENT_SECRET'
-@Field static final String ARM_TENANT_ID = 'ARM_TENANT_ID'
-@Field static final String RESOURCE_GROUP_NAME_CRED = 'RESOURCE_GROUP_NAME_CRED'
-@Field static final String APIM_NAME_CRED = 'APIM_NAME_CRED'
-
+/* groovylint-disable CompileStatic */
 pipeline {
   agent { label 'dev' }
-
-  parameters {
-    choice(name: 'ENV', choices: SUPPORTED_ENVS, description: 'Target environment')
-  }
 
   options {
     timestamps()
@@ -30,6 +12,12 @@ pipeline {
     TF_INPUT         = 'false'
     TF_IN_AUTOMATION = 'true'
     TF_DIR           = 'terraform'
+    RESOURCE_GROUP_NAME_CRED = credentials('stage-apim-rg-name')
+    APIM_NAME_CRED           = credentials('stage-apim-apim-name')
+    ARM_SUBSCRIPTION_ID      = credentials('stage-apim-azure-subscription-id')
+    ARM_CLIENT_ID            = credentials('stage-apim-azure-client')
+    ARM_CLIENT_SECRET        = credentials('stage-apim-azure-secret')
+    ARM_TENANT_ID            = credentials('stage-apim-azure-tenant')
   }
 
   stages {
@@ -40,9 +28,8 @@ pipeline {
           set -e
           echo "[Preflight] Checking required tools..."
 
-          if ! command -v docker >/dev/null 2>&1 && \
-             (! command -v node >/dev/null 2>&1 || ! command -v npx >/dev/null 2>&1); then
-            echo "ERROR: Need Docker or Node+npx to run Redocly CLI."
+          if ! command -v docker >/dev/null 2>&1 && ! command -v node >/dev/null 2>&1; then
+            echo "ERROR: Need Docker or Node to run Redocly CLI."
             exit 1
           fi
 
@@ -53,15 +40,6 @@ pipeline {
 
           echo "[Preflight] OK"
         '''
-      }
-    }
-
-    stage('Resolve ENV & Credentials') {
-      steps {
-        script {
-          validateEnvironment()
-          configureCredentials()
-        }
       }
     }
 
@@ -113,135 +91,105 @@ pipeline {
       }
     }
 
-    /*
-    stage('Redocly Lint (bundled)') {
-      steps {
-        script {
-          // STEP 1 — verify files exist
-          if (sh(script: 'ls build/api-bundled/*\\ v*.yaml >/dev/null 2>&1', returnStatus: true) != 0) {
-            error 'No bundled specs found. Aborting.'
-          }
 
-          // STEP 2 — safe file list
-          String[] files = sh(script: 'ls build/api-bundled/*\\ v*.yaml', returnStdout: true)
-            .trim().split('\\r?\\n')
+    // stage('Redocly Lint (bundled)') {
+    //   steps {
+    //     script {
 
-          // STEP 3 — quote filenames (because they contain spaces)
-          String filesQuoted = files.collect { f -> "\"${f}\"" }.join(' ')
+    //       // STEP 1 — verify files exist
+    //       if (sh(script: 'ls build/api-bundled/*\\ v*.yaml >/dev/null 2>&1', returnStatus: true) != 0) {
+    //         error "No bundled specs found. Aborting."
+    //       }
 
-          // STEP 4 — choose Redocly runner
-          boolean hasDocker = (sh(script: 'command -v docker >/dev/null 2>&1', returnStatus: true) == 0)
+    //       // STEP 2 — safe file list
+    //       def files = sh(script: 'ls build/api-bundled/*\\ v*.yaml', returnStdout: true)
+    //                     .trim().split('\\r?\\n')
 
-          String lintCmdDocker = """
-            docker run --rm -w /spec -v "$PWD":/spec redocly/cli \
-            lint --format json ${filesQuoted} \
-            | tee redocly-report.json
-          """
+    //       // STEP 3 — quote filenames (because they contain spaces)
+    //       def filesQuoted = files.collect { "\"${it}\"" }.join(' ')
 
-          String lintCmdNPX = """
-            npx -y @redocly/cli@latest \
-            lint --config redocly.yaml --format json ${filesQuoted} \
-            | tee redocly-report.json
-          """
+    //       // STEP 4 — choose Redocly runner
+    //       def hasDocker = (sh(script: 'command -v docker >/dev/null 2>&1', returnStatus: true) == 0)
 
-          // STEP 5 — run lint
-          int exitCode = sh(script: hasDocker ? lintCmdDocker : lintCmdNPX,
-            returnStatus: true)
+    //       def lintCmdDocker = """
+    //         docker run --rm -w /spec -v "$PWD":/spec redocly/cli \
+    //         lint --format json ${filesQuoted} \
+    //         | tee redocly-report.json
+    //       """
 
-          // STEP 6 — print by-rule summary
-          String text = readFile('redocly-report.json')
-          Object json = new groovy.json.JsonSlurper().parseText(text)
-          List reports = (json instanceof List) ? (List) json : [json]
-          List problems = reports.collectMany { r -> r.problems ?: [] }
-          Map byRule = problems.groupBy { p -> p.ruleId ?: p.rule }
-            .collectEntries { rule, list -> [(rule ?: 'unknown'): list.size()] }
+    //       def lintCmdNPX = """
+    //         npx -y @redocly/cli@latest \
+    //         lint --config redocly.yaml --format json ${filesQuoted} \
+    //         | tee redocly-report.json
+    //       """
 
-          echo '========= Redocly Summary ========='
-          echo byRule.sort { e -> -e.value }.toString()
-          echo '=================================='
+    //       // STEP 5 — run lint
+    //       def exitCode = sh(script: hasDocker ? lintCmdDocker : lintCmdNPX,
+    //                         returnStatus: true)
 
-          // STEP 7 — archive + fail only on real errors
-          archiveArtifacts artifacts: 'redocly-report.json', allowEmptyArchive: false
+    //       // STEP 6 — print by-rule summary
+    //       def text = readFile('redocly-report.json')
+    //       def json = new groovy.json.JsonSlurper().parseText(text)
+    //       def reports = (json instanceof List) ? json : [json]
+    //       def problems = reports.collectMany { it.problems ?: [] }
+    //       def byRule = problems.groupBy { it.ruleId ?: it.rule }
+    //                            .collectEntries { rule, list -> [(rule ?: 'unknown'): list.size()] }
 
-          if (exitCode != 0) {
-            error 'Redocly lint failed. See redocly-report.json.'
-          }
-        }
-      }
-    }
-    */
+    //       echo "========= Redocly Summary ========="
+    //       echo byRule.sort { -it.value }.toString()
+    //       echo "=================================="
+
+    //       // STEP 7 — archive + fail only on real errors
+    //       archiveArtifacts artifacts: 'redocly-report.json', allowEmptyArchive: false
+
+    //       if (exitCode != 0) {
+    //         error "Redocly lint failed. See redocly-report.json."
+    //       }
+    //     }
+    //   }
+    // }
 
     stage('Terraform Init/Validate') {
       steps {
-        withCredentials([
-          string(credentialsId: env.CRED_AZURE_SUBSCRIPTION_ID, variable: ARM_SUBSCRIPTION_ID),
-          string(credentialsId: env.CRED_AZURE_CLIENT_ID, variable: ARM_CLIENT_ID),
-          string(credentialsId: env.CRED_AZURE_CLIENT_SECRET, variable: ARM_CLIENT_SECRET),
-          string(credentialsId: env.CRED_AZURE_TENANT_ID, variable: ARM_TENANT_ID)
-        ]) {
-          sh """
-            set -e
-            echo "[Init] Using TF_DIR=${TF_DIR}"
-            terraform -chdir="${TF_DIR}" init -backend-config="${BACKEND_FILE}" -lock-timeout=5m -input=false -no-color
+        sh """
+          set -e
 
-            set +e
-            FMT_OUTPUT=\$(terraform -chdir="${TF_DIR}" fmt -check -diff -recursive -no-color 2>&1)
-            FMT_STATUS=\$?
-            set -e
-            if [ "\${FMT_STATUS}" -ne 0 ]; then
-              echo "[Terraform] fmt issues detected:"
-              echo "\${FMT_OUTPUT}"
-              exit \${FMT_STATUS}
-            fi
+          echo "[Init] Using TF_DIR=${TF_DIR}"
+          terraform -chdir="${TF_DIR}" init -backend-config=backend.tfvars -input=false -no-color
 
-            terraform -chdir="${TF_DIR}" validate -no-color
-          """
-        }
+          set +e
+          FMT_OUTPUT=\$(terraform -chdir="${TF_DIR}" fmt -check -diff -recursive -no-color 2>&1)
+          FMT_STATUS=\$?
+          set -e
+          if [ "\${FMT_STATUS}" -ne 0 ]; then
+            echo "[Terraform] fmt issues detected:"
+            echo "\${FMT_OUTPUT}"
+            exit \${FMT_STATUS}
+          fi
+
+          terraform -chdir="${TF_DIR}" validate -no-color
+        """
       }
     }
 
     stage('Terraform Plan') {
       steps {
-        withCredentials([
-          string(credentialsId: env.CRED_RG_ID, variable: RESOURCE_GROUP_NAME_CRED),
-          string(credentialsId: env.CRED_APIM_NAME_ID, variable: APIM_NAME_CRED),
-          string(credentialsId: env.CRED_AZURE_SUBSCRIPTION_ID, variable: ARM_SUBSCRIPTION_ID),
-          string(credentialsId: env.CRED_AZURE_CLIENT_ID, variable: ARM_CLIENT_ID),
-          string(credentialsId: env.CRED_AZURE_CLIENT_SECRET, variable: ARM_CLIENT_SECRET),
-          string(credentialsId: env.CRED_AZURE_TENANT_ID, variable: ARM_TENANT_ID)
-        ]) {
-          sh """
-            #!/usr/bin/env bash
-            set -e
-            set +e
-            terraform -chdir="${TF_DIR}" plan -detailed-exitcode -lock-timeout=5m -input=false -no-color \
-              -var="resource_group_name=${RESOURCE_GROUP_NAME_CRED}" \
-              -var="api_management_name=${APIM_NAME_CRED}" \
-              -out=tfplan.out
-            PLAN_STATUS=\$?
-            set -e
+        sh """
+          #!/usr/bin/env bash
+          set -e
 
-            if [ "${PLAN_STATUS}" -eq 1 ]; then
-              echo "ERROR: Terraform plan failed"
-              exit 1
-            fi
+          terraform -chdir="${TF_DIR}" plan -input=false -no-color \
+            -var="resource_group_name=${RESOURCE_GROUP_NAME_CRED}" \
+            -var="api_management_name=${APIM_NAME_CRED}" \
+            -out=tfplan.out
 
-            if [ "${PLAN_STATUS}" -eq 0 ]; then
-              echo "[Plan] No infrastructure changes detected"
-              rm -f "${TF_DIR}/has_changes.flag"
-              exit 0
-            fi
-
-            touch "${TF_DIR}/has_changes.flag"
-
-            PLAN_FILE_PATH="${TF_DIR}/tfplan.out"
-            if [ ! -f "\${PLAN_FILE_PATH}" ]; then
-              echo "ERROR: Plan command finished but plan file missing at \${PLAN_FILE_PATH}"
-              exit 1
-            fi
-            echo "[Plan] Plan file created at \${PLAN_FILE_PATH}"
-          """
-        }
+          PLAN_FILE_PATH="${TF_DIR}/tfplan.out"
+          if [ ! -f "\${PLAN_FILE_PATH}" ]; then
+            echo "ERROR: Plan command finished but plan file missing at \${PLAN_FILE_PATH}"
+            exit 1
+          fi
+          echo "[Plan] Plan file created at \${PLAN_FILE_PATH}"
+        """
       }
       post {
         always {
@@ -250,59 +198,64 @@ pipeline {
       }
     }
 
-    stage('Production Approval') {
-      when {
-        // groovylint-disable-next-line DuplicateStringLiteral
-        expression { env.TF_ENV == PROD_ENV }
-      }
-      steps {
-        input message: "Approve Terraform apply to ${env.TF_ENV}?", ok: 'Deploy'
-      }
-    }
-
     stage('Terraform Apply') {
       steps {
-        withCredentials([
-          string(credentialsId: env.CRED_RG_ID, variable: RESOURCE_GROUP_NAME_CRED),
-          string(credentialsId: env.CRED_APIM_NAME_ID, variable: APIM_NAME_CRED),
-          string(credentialsId: env.CRED_AZURE_SUBSCRIPTION_ID, variable: ARM_SUBSCRIPTION_ID),
-          string(credentialsId: env.CRED_AZURE_CLIENT_ID, variable: ARM_CLIENT_ID),
-          string(credentialsId: env.CRED_AZURE_CLIENT_SECRET, variable: ARM_CLIENT_SECRET),
-          string(credentialsId: env.CRED_AZURE_TENANT_ID, variable: ARM_TENANT_ID)
-        ]) {
-          sh """
-            #!/usr/bin/env bash
-            set -e
+        sh """
+          #!/usr/bin/env bash
+          set -e
 
-            PLAN_FILE="tfplan.out"
-            PLAN_FILE_PATH="${TF_DIR}/\${PLAN_FILE}"
-            echo "[Apply] Workspace: \$(pwd)"
-            echo "[Apply] TF_DIR=${TF_DIR}"
+          PLAN_FILE="tfplan.out"
+          PLAN_FILE_PATH="${TF_DIR}/\${PLAN_FILE}"
+          echo "[Apply] Workspace: \$(pwd)"
+          echo "[Apply] TF_DIR=${TF_DIR}"
+          echo "[Apply] Expecting plan at \${PLAN_FILE_PATH}"
+          if [ ! -f "\${PLAN_FILE_PATH}" ]; then
+            echo "ERROR: Plan file not found at \${PLAN_FILE_PATH}"
+            ls -la "${TF_DIR}" || true
+            exit 1
+          fi
 
-            if [ ! -f "${TF_DIR}/has_changes.flag" ]; then
-              echo "[Apply] No changes detected in plan stage; skipping apply"
-              exit 0
+          # Capture state before apply
+          STATE_BEFORE="${TF_DIR}/state_before.txt"
+          terraform -chdir="${TF_DIR}" state list > "\${STATE_BEFORE}" 2>/dev/null || true
+          echo "[Apply] State snapshot saved: \$(wc -l < \${STATE_BEFORE}) resources"
+
+          # Attempt apply
+          echo "[Apply] Applying plan..."
+          if ! terraform -chdir="${TF_DIR}" apply -input=false -no-color -auto-approve "\${PLAN_FILE}"; then
+            echo "[Rollback] Apply failed. Rolling back newly created resources..."
+
+            # Capture state after failed apply
+            STATE_AFTER="${TF_DIR}/state_after.txt"
+            terraform -chdir="${TF_DIR}" state list > "\${STATE_AFTER}" 2>/dev/null || true
+
+            # Find resources created in this run (in AFTER but not BEFORE)
+            NEW_RESOURCES=\$(grep -Fxv -f "\${STATE_BEFORE}" "\${STATE_AFTER}" || true)
+
+            if [ -n "\${NEW_RESOURCES}" ]; then
+              echo "[Rollback] Found \$(echo \"\${NEW_RESOURCES}\" | wc -l) newly created resources. Destroying..."
+              echo "\${NEW_RESOURCES}" | while IFS= read -r resource; do
+                if [[ "\${resource}" == data.* ]]; then
+                  echo "[Rollback] Skipping data resource: \${resource}"
+                  continue
+                fi
+                echo "[Rollback] Destroying: \${resource}"
+                terraform -chdir="${TF_DIR}" destroy -target="\${resource}" -auto-approve -no-color \
+                  -var="resource_group_name=${RESOURCE_GROUP_NAME_CRED}" \
+                  -var="api_management_name=${APIM_NAME_CRED}"
+              done
+              echo "[Rollback] Cleanup complete"
+            else
+              echo "[Rollback] No newly created resources found to destroy"
             fi
 
-            echo "[Apply] Expecting plan at \${PLAN_FILE_PATH}"
-            if [ ! -f "\${PLAN_FILE_PATH}" ]; then
-              echo "ERROR: Plan file not found at \${PLAN_FILE_PATH}"
-              ls -la "${TF_DIR}" || true
-              exit 1
-            fi
+            rm -f "\${STATE_BEFORE}" "\${STATE_AFTER}"
+            exit 1
+          fi
 
-            echo "[Apply] Applying plan..."
-            if ! terraform -chdir="${TF_DIR}" apply -lock-timeout=5m \
-              -input=false -no-color -auto-approve "\${PLAN_FILE}"; then
-              echo "ERROR: Apply failed. Automatic targeted rollback is disabled by policy."
-              echo "Please perform controlled manual recovery using approved runbook."
-              exit 1
-            fi
-
-            rm -f "${TF_DIR}/has_changes.flag"
-            echo "[Apply] Deployment successful"
-          """
-        }
+          rm -f "${TF_DIR}/state_before.txt" "${TF_DIR}/state_after.txt"
+          echo "[Apply] Deployment successful"
+        """
       }
     }
   }
@@ -317,29 +270,4 @@ pipeline {
       '''
     }
   }
-}
-
-// Helper methods to reduce nesting and improve readability
-void validateEnvironment() {
-  env.TF_ENV = params.ENV?.trim()
-  if (!env.TF_ENV) {
-    error 'ENV build parameter is required (for example: stage or prod)'
-  }
-  if (!SUPPORTED_ENVS.contains(env.TF_ENV)) {
-    error "Unsupported ENV=${env.TF_ENV}. Expected one of: ${SUPPORTED_ENVS.join(', ')}"
-  }
-}
-
-void configureCredentials() {
-  String credPrefix = env.TF_ENV
-  env.BACKEND_FILE = "backend-${env.TF_ENV}.tfvars"
-  env.with {
-    CRED_RG_ID = "${credPrefix}-apim-rg-name"
-    CRED_APIM_NAME_ID = "${credPrefix}-apim-apim-name"
-    CRED_AZURE_SUBSCRIPTION_ID = "${credPrefix}-apim-azure-subscription-id"
-    CRED_AZURE_CLIENT_ID = "${credPrefix}-apim-azure-client"
-    CRED_AZURE_CLIENT_SECRET = "${credPrefix}-apim-azure-secret"
-    CRED_AZURE_TENANT_ID = "${credPrefix}-apim-azure-tenant"
-  }
-  echo "Computed ENV=${env.TF_ENV} TF_DIR=${env.TF_DIR} BACKEND_FILE=${env.BACKEND_FILE}"
 }
