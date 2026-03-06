@@ -90,9 +90,15 @@ resource "azurerm_api_management_api" "apis" {
   protocols    = ["https"]
   service_url  = each.value.url
 
-  version_set_id = azurerm_api_management_api_version_set.vs[each.value.api_path].id
-  version        = each.value.vstr
-  revision       = "1"
+  version_set_id        = azurerm_api_management_api_version_set.vs[each.value.api_path].id
+  version               = each.value.vstr
+  revision              = "1"
+  subscription_required = var.subscription_required
+
+  subscription_key_parameter_names {
+    header = var.subscription_key_header_name
+    query  = var.subscription_key_query_param_name
+  }
 
   import {
     content_format = "openapi"
