@@ -1,5 +1,7 @@
 /* groovylint-disable CompileStatic */
 
+import groovy.transform.Field
+
 // Constants to eliminate duplicate string literals
 @Field static final String PROD_ENV = 'prod'
 @Field static final List SUPPORTED_ENVS = ['stage', PROD_ENV]
