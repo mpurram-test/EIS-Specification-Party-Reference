@@ -1,6 +1,10 @@
-/* groovylint-disable CompileStatic */
+/* groovylint-disable CompileStatic, GStringExpressionWithinString */
 pipeline {
   agent { label 'dev' }
+
+  parameters {
+    choice(name: 'ENV', choices: ['stage', 'prod'], description: 'Target environment')
+  }
 
   options {
     timestamps()
@@ -8,17 +12,19 @@ pipeline {
     timeout(time: 60, unit: 'MINUTES')
   }
 
+  // groovylint-disable GStringExpressionWithinString
   environment {
-    TF_INPUT         = 'false'
-    TF_IN_AUTOMATION = 'true'
-    TF_DIR           = 'terraform'
-    RESOURCE_GROUP_NAME_CRED = credentials('stage-apim-rg-name')
-    APIM_NAME_CRED           = credentials('stage-apim-apim-name')
-    ARM_SUBSCRIPTION_ID      = credentials('stage-apim-azure-subscription-id')
-    ARM_CLIENT_ID            = credentials('stage-apim-azure-client')
-    ARM_CLIENT_SECRET        = credentials('stage-apim-azure-secret')
-    ARM_TENANT_ID            = credentials('stage-apim-azure-tenant')
+    TF_INPUT                  = 'false'
+    TF_IN_AUTOMATION          = 'true'
+    TF_DIR                    = 'terraform'
+    RESOURCE_GROUP_NAME_CRED  = credentials("${params.ENV}-apim-rg-name")
+    APIM_NAME_CRED            = credentials("${params.ENV}-apim-apim-name")
+    ARM_SUBSCRIPTION_ID        = credentials("${params.ENV}-apim-azure-subscription-id")
+    ARM_CLIENT_ID              = credentials("${params.ENV}-apim-azure-client")
+    ARM_CLIENT_SECRET          = credentials("${params.ENV}-apim-azure-secret")
+    ARM_TENANT_ID              = credentials("${params.ENV}-apim-azure-tenant")
   }
+  // groovylint-enable GStringExpressionWithinString
 
   stages {
     stage('Preflight: Tooling') {
@@ -40,6 +46,17 @@ pipeline {
 
           echo "[Preflight] OK"
         '''
+      }
+    }
+
+    stage('Resolve ENV & Credentials') {
+      steps {
+        script {
+          env.TF_ENV = params.ENV?.trim() ?: (env.BRANCH_NAME == 'main' ? 'prod' : 'stage')
+          env.BACKEND_TFVARS = "backend-${env.TF_ENV}.tfvars"
+          echo "Selected ENV: ${env.TF_ENV}"
+          echo "Backend config file: ${env.BACKEND_TFVARS}"
+        }
       }
     }
 
@@ -90,7 +107,6 @@ pipeline {
         '''
       }
     }
-
 
     // stage('Redocly Lint (bundled)') {
     //   steps {
@@ -151,30 +167,30 @@ pipeline {
 
     stage('Terraform Init/Validate') {
       steps {
-        sh """
+        sh '''
           set -e
 
           echo "[Init] Using TF_DIR=${TF_DIR}"
-          terraform -chdir="${TF_DIR}" init -backend-config=backend.tfvars -input=false -no-color
+          terraform -chdir="${TF_DIR}" init -backend-config="${BACKEND_TFVARS}" -input=false -no-color
 
           set +e
-          FMT_OUTPUT=\$(terraform -chdir="${TF_DIR}" fmt -check -diff -recursive -no-color 2>&1)
-          FMT_STATUS=\$?
+          FMT_OUTPUT=$(terraform -chdir="${TF_DIR}" fmt -check -diff -recursive -no-color 2>&1)
+          FMT_STATUS=$?
           set -e
-          if [ "\${FMT_STATUS}" -ne 0 ]; then
+          if [ "${FMT_STATUS}" -ne 0 ]; then
             echo "[Terraform] fmt issues detected:"
-            echo "\${FMT_OUTPUT}"
-            exit \${FMT_STATUS}
+            echo "${FMT_OUTPUT}"
+            exit ${FMT_STATUS}
           fi
 
           terraform -chdir="${TF_DIR}" validate -no-color
-        """
+        '''
       }
     }
 
     stage('Terraform Plan') {
       steps {
-        sh """
+        sh '''
           #!/usr/bin/env bash
           set -e
 
@@ -184,12 +200,12 @@ pipeline {
             -out=tfplan.out
 
           PLAN_FILE_PATH="${TF_DIR}/tfplan.out"
-          if [ ! -f "\${PLAN_FILE_PATH}" ]; then
-            echo "ERROR: Plan command finished but plan file missing at \${PLAN_FILE_PATH}"
+          if [ ! -f "${PLAN_FILE_PATH}" ]; then
+            echo "ERROR: Plan command finished but plan file missing at ${PLAN_FILE_PATH}"
             exit 1
           fi
-          echo "[Plan] Plan file created at \${PLAN_FILE_PATH}"
-        """
+          echo "[Plan] Plan file created at ${PLAN_FILE_PATH}"
+        '''
       }
       post {
         always {
@@ -200,62 +216,30 @@ pipeline {
 
     stage('Terraform Apply') {
       steps {
-        sh """
+        sh '''
           #!/usr/bin/env bash
           set -e
 
           PLAN_FILE="tfplan.out"
-          PLAN_FILE_PATH="${TF_DIR}/\${PLAN_FILE}"
-          echo "[Apply] Workspace: \$(pwd)"
+          PLAN_FILE_PATH="${TF_DIR}/${PLAN_FILE}"
+          echo "[Apply] Workspace: $(pwd)"
           echo "[Apply] TF_DIR=${TF_DIR}"
-          echo "[Apply] Expecting plan at \${PLAN_FILE_PATH}"
-          if [ ! -f "\${PLAN_FILE_PATH}" ]; then
-            echo "ERROR: Plan file not found at \${PLAN_FILE_PATH}"
+          echo "[Apply] Expecting plan at ${PLAN_FILE_PATH}"
+          if [ ! -f "${PLAN_FILE_PATH}" ]; then
+            echo "ERROR: Plan file not found at ${PLAN_FILE_PATH}"
             ls -la "${TF_DIR}" || true
             exit 1
           fi
 
-          # Capture state before apply
-          STATE_BEFORE="${TF_DIR}/state_before.txt"
-          terraform -chdir="${TF_DIR}" state list > "\${STATE_BEFORE}" 2>/dev/null || true
-          echo "[Apply] State snapshot saved: \$(wc -l < \${STATE_BEFORE}) resources"
-
-          # Attempt apply
           echo "[Apply] Applying plan..."
-          if ! terraform -chdir="${TF_DIR}" apply -input=false -no-color -auto-approve "\${PLAN_FILE}"; then
-            echo "[Rollback] Apply failed. Rolling back newly created resources..."
-
-            # Capture state after failed apply
-            STATE_AFTER="${TF_DIR}/state_after.txt"
-            terraform -chdir="${TF_DIR}" state list > "\${STATE_AFTER}" 2>/dev/null || true
-
-            # Find resources created in this run (in AFTER but not BEFORE)
-            NEW_RESOURCES=\$(grep -Fxv -f "\${STATE_BEFORE}" "\${STATE_AFTER}" || true)
-
-            if [ -n "\${NEW_RESOURCES}" ]; then
-              echo "[Rollback] Found \$(echo \"\${NEW_RESOURCES}\" | wc -l) newly created resources. Destroying..."
-              echo "\${NEW_RESOURCES}" | while IFS= read -r resource; do
-                if [[ "\${resource}" == data.* ]]; then
-                  echo "[Rollback] Skipping data resource: \${resource}"
-                  continue
-                fi
-                echo "[Rollback] Destroying: \${resource}"
-                terraform -chdir="${TF_DIR}" destroy -target="\${resource}" -auto-approve -no-color \
-                  -var="resource_group_name=${RESOURCE_GROUP_NAME_CRED}" \
-                  -var="api_management_name=${APIM_NAME_CRED}"
-              done
-              echo "[Rollback] Cleanup complete"
-            else
-              echo "[Rollback] No newly created resources found to destroy"
-            fi
-
-            rm -f "\${STATE_BEFORE}" "\${STATE_AFTER}"
+          if ! terraform -chdir="${TF_DIR}" apply -input=false -no-color -auto-approve "${PLAN_FILE}"; then
+            echo "ERROR: Apply failed. Automatic targeted rollback is disabled by policy."
+            echo "Please perform controlled manual recovery using approved runbook."
             exit 1
           fi
 
-          rm -f "${TF_DIR}/state_before.txt" "${TF_DIR}/state_after.txt"
           echo "[Apply] Deployment successful"
-        """
+        '''
       }
     }
   }
