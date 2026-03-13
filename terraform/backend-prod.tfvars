@@ -1,6 +1,4 @@
-# Remote state backend settings for prod
-# Fill these values for your environment.
-resource_group_name  = "<prod-tfstate-resource-group>"
-storage_account_name = "<prod-tfstate-storage-account>"
-container_name       = "<prod-tfstate-container>"
+resource_group_name  = "scb-prod-tfstate-eus2-rg-01"
+storage_account_name = "scbprodtfstateeus201"
+container_name       = "apim-prod-tfstate"
 key                  = "party-reference/prod.tfstate"
