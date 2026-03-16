@@ -87,7 +87,6 @@ pipeline {
       }
     }
 
-    /* groovylint-disable NestedBlockDepth */
     stage('Change Information') {
       parallel {
         stage('Get Existing Change Ticket') {
@@ -366,7 +365,6 @@ pipeline {
         }
       }
     }
-    // groovylint-enable NestedBlockDepth
   }
 
   post {
