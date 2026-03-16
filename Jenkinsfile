@@ -88,7 +88,6 @@ pipeline {
 
     // groovylint-disable NestedBlockDepth
     stage('Change Information') {
-      when { expression { env.TF_ENV == 'prod' } }
       parallel {
         stage('Get Existing Change Ticket') {
           agent none
@@ -116,7 +115,7 @@ pipeline {
     stage('Update Change Ticket') {
       agent none
       options { skipDefaultCheckout() }
-      when { expression { env.TF_ENV == 'prod' && env.SYS_ID != '' && env.SYS_ID != null } }
+      when { expression {env.SYS_ID != '' && env.SYS_ID != null } }
       steps {
         script {
           def changeLogDesc = getSCMChanges()
@@ -141,7 +140,6 @@ pipeline {
     stage('Production Gate') {
       agent none
       options { skipDefaultCheckout() }
-      when { expression { env.TF_ENV == 'prod' } }
       steps {
         timeout(time: 10, unit: 'MINUTES') {
           script {
@@ -293,7 +291,7 @@ pipeline {
     stage('Start Implementation') {
       agent { label 'dev' }
       options { skipDefaultCheckout() }
-      when { expression { env.TF_ENV == 'prod' && env.SYS_ID != '' && env.SYS_ID != null } }
+      when { expression {env.SYS_ID != '' && env.SYS_ID != null } }
       steps {
         script {
           updateSNOWChange('', 'implement')
@@ -342,7 +340,7 @@ pipeline {
     stage('Post Implementation') {
       agent { label 'dev' }
       options { skipDefaultCheckout() }
-      when { expression { env.TF_ENV == 'prod' && env.SYS_ID != '' && env.SYS_ID != null } }
+      when { expression {env.SYS_ID != '' && env.SYS_ID != null } }
       steps {
         script {
           getSNOWChangeTask('Post%20implementation%20testing')
