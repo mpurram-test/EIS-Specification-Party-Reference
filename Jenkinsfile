@@ -1,4 +1,5 @@
 /* groovylint-disable CompileStatic, GStringExpressionWithinString, LineLength, NestedBlockDepth, DuplicateListLiteral, DuplicateStringLiteral, DuplicateNumberLiteral, NoDef, VariableTypeRequired, UnnecessaryGetter */
+
 pipeline {
   agent { label 'dev' }
 
@@ -24,7 +25,7 @@ pipeline {
     timeout(time: 60, unit: 'MINUTES')
   }
 
-  // groovylint-disable GStringExpressionWithinString
+  /* groovylint-disable GStringExpressionWithinString */
   environment {
     TF_INPUT                  = 'false'
     TF_IN_AUTOMATION          = 'true'
@@ -36,7 +37,7 @@ pipeline {
     ARM_CLIENT_SECRET          = credentials("${params.ENV}-apim-azure-secret")
     ARM_TENANT_ID              = credentials("${params.ENV}-apim-azure-tenant")
   }
-  // groovylint-enable GStringExpressionWithinString
+  /* groovylint-enable GStringExpressionWithinString */
 
   stages {
     stage('Preflight: Tooling') {
@@ -86,7 +87,7 @@ pipeline {
       }
     }
 
-    // groovylint-disable NestedBlockDepth
+    /* groovylint-disable NestedBlockDepth */
     stage('Change Information') {
       parallel {
         stage('Get Existing Change Ticket') {
@@ -115,7 +116,7 @@ pipeline {
     stage('Update Change Ticket') {
       agent none
       options { skipDefaultCheckout() }
-      when { expression {env.SYS_ID != '' && env.SYS_ID != null } }
+      when { expression { env.SYS_ID != '' && env.SYS_ID != null } }
       steps {
         script {
           def changeLogDesc = getSCMChanges()
@@ -140,6 +141,7 @@ pipeline {
     stage('Production Gate') {
       agent none
       options { skipDefaultCheckout() }
+      when { expression { env.TF_ENV == 'prod' } }
       steps {
         timeout(time: 10, unit: 'MINUTES') {
           script {
