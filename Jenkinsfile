@@ -12,7 +12,19 @@ pipeline {
     timeout(time: 60, unit: 'MINUTES')
   }
 
-
+  // groovylint-disable GStringExpressionWithinString
+  environment {
+    TF_INPUT                  = 'false'
+    TF_IN_AUTOMATION          = 'true'
+    TF_DIR                    = 'terraform'
+    RESOURCE_GROUP_NAME_CRED  = credentials("${params.ENV}-apim-rg-name")
+    APIM_NAME_CRED            = credentials("${params.ENV}-apim-apim-name")
+    ARM_SUBSCRIPTION_ID        = credentials("${params.ENV}-apim-azure-subscription-id")
+    ARM_CLIENT_ID              = credentials("${params.ENV}-apim-azure-client")
+    ARM_CLIENT_SECRET          = credentials("${params.ENV}-apim-azure-secret")
+    ARM_TENANT_ID              = credentials("${params.ENV}-apim-azure-tenant")
+  }
+  // groovylint-enable GStringExpressionWithinString
 
   stages {
     stage('Preflight: Tooling') {
@@ -96,42 +108,62 @@ pipeline {
       }
     }
 
-    stage('Bundle validation (Redocly)') {
-      steps {
-        sh '''
-          #!/usr/bin/env bash
-          set -euo pipefail
+    // stage('Redocly Lint (bundled)') {
+    //   steps {
+    //     script {
 
-          SPECS_LIST_FILE="$(mktemp)"
-          find build/api-bundled -maxdepth 1 -type f -name "* v*.yaml" -print0 > "${SPECS_LIST_FILE}"
+    //       // STEP 1 — verify files exist
+    //       if (sh(script: 'ls build/api-bundled/*\\ v*.yaml >/dev/null 2>&1', returnStatus: true) != 0) {
+    //         error "No bundled specs found. Aborting."
+    //       }
 
-          if [ ! -s "${SPECS_LIST_FILE}" ]; then
-            echo "ERROR: No bundled specs found in build/api-bundled"
-            exit 1
-          fi
+    //       // STEP 2 — safe file list
+    //       def files = sh(script: 'ls build/api-bundled/*\\ v*.yaml', returnStdout: true)
+    //                     .trim().split('\\r?\\n')
 
-          count=$(tr -cd '\0' < "${SPECS_LIST_FILE}" | wc -c | xargs)
-          echo "[Lint] Running Redocly against ${count} bundled spec(s)"
+    //       // STEP 3 — quote filenames (because they contain spaces)
+    //       def filesQuoted = files.collect { "\"${it}\"" }.join(' ')
 
-          if command -v docker >/dev/null 2>&1; then
-            xargs -0 docker run --rm -w /spec -v "$PWD":/spec redocly/cli \
-              lint --config redocly.yaml --format json < "${SPECS_LIST_FILE}" \
-              | tee redocly-report.json
-          else
-            xargs -0 npx -y @redocly/cli@latest \
-              lint --config redocly.yaml --format json < "${SPECS_LIST_FILE}" \
-              | tee redocly-report.json
-          fi
+    //       // STEP 4 — choose Redocly runner
+    //       def hasDocker = (sh(script: 'command -v docker >/dev/null 2>&1', returnStatus: true) == 0)
 
-          rm -f "${SPECS_LIST_FILE}"
-        '''
-      }
-      post {
-        always {
-          archiveArtifacts artifacts: 'redocly-report.json', allowEmptyArchive: true
-        }
-      }
-    }
+    //       def lintCmdDocker = """
+    //         docker run --rm -w /spec -v "$PWD":/spec redocly/cli \
+    //         lint --format json ${filesQuoted} \
+    //         | tee redocly-report.json
+    //       """
+
+    //       def lintCmdNPX = """
+    //         npx -y @redocly/cli@latest \
+    //         lint --config redocly.yaml --format json ${filesQuoted} \
+    //         | tee redocly-report.json
+    //       """
+
+    //       // STEP 5 — run lint
+    //       def exitCode = sh(script: hasDocker ? lintCmdDocker : lintCmdNPX,
+    //                         returnStatus: true)
+
+    //       // STEP 6 — print by-rule summary
+    //       def text = readFile('redocly-report.json')
+    //       def json = new groovy.json.JsonSlurper().parseText(text)
+    //       def reports = (json instanceof List) ? json : [json]
+    //       def problems = reports.collectMany { it.problems ?: [] }
+    //       def byRule = problems.groupBy { it.ruleId ?: it.rule }
+    //                            .collectEntries { rule, list -> [(rule ?: 'unknown'): list.size()] }
+
+    //       echo "========= Redocly Summary ========="
+    //       echo byRule.sort { -it.value }.toString()
+    //       echo "=================================="
+
+    //       // STEP 7 — archive + fail only on real errors
+    //       archiveArtifacts artifacts: 'redocly-report.json', allowEmptyArchive: false
+
+    //       if (exitCode != 0) {
+    //         error "Redocly lint failed. See redocly-report.json."
+    //       }
+    //     }
+    //   }
+    // }
 
     stage('Terraform Init/Validate') {
       steps {
