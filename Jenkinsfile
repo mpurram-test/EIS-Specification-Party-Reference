@@ -12,19 +12,7 @@ pipeline {
     timeout(time: 60, unit: 'MINUTES')
   }
 
-  // groovylint-disable GStringExpressionWithinString
-  environment {
-    TF_INPUT                  = 'false'
-    TF_IN_AUTOMATION          = 'true'
-    TF_DIR                    = 'terraform'
-    RESOURCE_GROUP_NAME_CRED  = credentials("${params.ENV}-apim-rg-name")
-    APIM_NAME_CRED            = credentials("${params.ENV}-apim-apim-name")
-    ARM_SUBSCRIPTION_ID        = credentials("${params.ENV}-apim-azure-subscription-id")
-    ARM_CLIENT_ID              = credentials("${params.ENV}-apim-azure-client")
-    ARM_CLIENT_SECRET          = credentials("${params.ENV}-apim-azure-secret")
-    ARM_TENANT_ID              = credentials("${params.ENV}-apim-azure-tenant")
-  }
-  // groovylint-enable GStringExpressionWithinString
+
 
   stages {
     stage('Preflight: Tooling') {
