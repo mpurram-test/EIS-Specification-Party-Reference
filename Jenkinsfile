@@ -1,22 +1,9 @@
-/* groovylint-disable CompileStatic, GStringExpressionWithinString, LineLength, NestedBlockDepth, DuplicateListLiteral, DuplicateStringLiteral, DuplicateNumberLiteral, NoDef, VariableTypeRequired, UnnecessaryGetter */
-
+/* groovylint-disable CompileStatic, GStringExpressionWithinString */
 pipeline {
   agent { label 'dev' }
 
   parameters {
     choice(name: 'ENV', choices: ['stage', 'prod'], description: 'Target environment')
-    choice(name: 'CreateCAB', choices: ['No', 'Yes'], description: 'Create a new ServiceNow change request')
-    choice(
-      name: 'ChangeType',
-      choices: ['normal', 'expedited', 'emergency'],
-      description: 'ServiceNow change type when creating a new ticket'
-    )
-    string(name: 'Change', defaultValue: '', description: 'Existing ServiceNow change ticket ID (example: CHG000123)')
-    string(
-      name: 'SNOW_SERVICE_NAME',
-      defaultValue: 'APIM-API-Deploy',
-      description: 'Service name passed to createSNOWChange'
-    )
   }
 
   options {
@@ -25,7 +12,7 @@ pipeline {
     timeout(time: 60, unit: 'MINUTES')
   }
 
-  /* groovylint-disable GStringExpressionWithinString */
+  // groovylint-disable GStringExpressionWithinString
   environment {
     TF_INPUT                  = 'false'
     TF_IN_AUTOMATION          = 'true'
@@ -37,7 +24,7 @@ pipeline {
     ARM_CLIENT_SECRET          = credentials("${params.ENV}-apim-azure-secret")
     ARM_TENANT_ID              = credentials("${params.ENV}-apim-azure-tenant")
   }
-  /* groovylint-enable GStringExpressionWithinString */
+  // groovylint-enable GStringExpressionWithinString
 
   stages {
     stage('Preflight: Tooling') {
@@ -69,7 +56,6 @@ pipeline {
           env.BACKEND_TFVARS = "backend-${env.TF_ENV}.tfvars"
           echo "Selected ENV: ${env.TF_ENV}"
           echo "Backend config file: ${env.BACKEND_TFVARS}"
-          echo "Change management enabled: ${env.TF_ENV == 'prod'}"
         }
       }
     }
@@ -84,87 +70,6 @@ pipeline {
           echo ""
           echo "API dir:" && ls -la api || true
         '''
-      }
-    }
-
-    stage('Change Information') {
-      parallel {
-        stage('Get Existing Change Ticket') {
-          agent none
-          options { skipDefaultCheckout() }
-          when { expression { params.CreateCAB != 'Yes' && params.Change?.trim() } }
-          steps {
-            script {
-              getSNOWChange(params.Change)
-            }
-          }
-        }
-        stage('Create Change Request') {
-          agent none
-          options { skipDefaultCheckout() }
-          when { expression { params.CreateCAB == 'Yes' } }
-          steps {
-            script {
-              createSNOWChange(params.SNOW_SERVICE_NAME, params.ChangeType)
-            }
-          }
-        }
-      }
-    }
-
-    stage('Update Change Ticket') {
-      agent none
-      options { skipDefaultCheckout() }
-      when { expression { env.SYS_ID != '' && env.SYS_ID != null } }
-      steps {
-        script {
-          def changeLogDesc = getSCMChanges()
-
-          def prevChangeLogDesc = ''
-          def prevChanges = (env.CHANGE_DESC ?: '').split('\\n')
-          for (int j = 0; j < prevChanges.length; j++) {
-            if (prevChanges[j] != '\\n') {
-              prevChangeLogDesc = prevChangeLogDesc + prevChanges[j] + '\\n'
-            }
-          }
-
-          def payload = '''{
-               "description": "''' + prevChangeLogDesc + changeLogDesc + '''"
-          }'''
-
-          updateSNOWChange(payload, 'updateDesc')
-        }
-      }
-    }
-
-    stage('Production Gate') {
-      agent none
-      options { skipDefaultCheckout() }
-      when { expression { env.TF_ENV == 'prod' } }
-      steps {
-        timeout(time: 10, unit: 'MINUTES') {
-          script {
-            if (env.CHANGE_STATE == '' || env.CHANGE_STATE == null || env.CHANGE_STATE.toInteger() < -2) {
-              def approvalMap = input id: 'prod_gate',
-                message: 'Change request not found or not approved by CAB',
-                parameters: [
-                text(description: 'Approved ServiceNow change ID.', name: 'ChangeRequest'),
-                choice(
-                  description: 'Type of change being pushed.',
-                  choices: 'CAB Approved\nEmergency',
-                  name: 'ChangeApprovalType'
-                )
-              ], ok: 'Proceed?', submitter: 'authenticated', submitterParameter: 'APPROVER'
-              env.PROD_APPROVER = approvalMap['APPROVER']
-              env.CHANGE_TYPE = approvalMap['ChangeApprovalType']
-              env.CHANGE_ID = approvalMap['ChangeRequest']
-            } else {
-              env.PROD_APPROVER = env.BUILD_USER ?: 'jenkins'
-              env.CHANGE_TYPE = 'CAB Approved'
-              env.CHANGE_ID = params.Change
-            }
-          }
-        }
       }
     }
 
@@ -289,26 +194,6 @@ pipeline {
       }
     }
 
-    stage('Start Implementation') {
-      agent { label 'dev' }
-      options { skipDefaultCheckout() }
-      when { expression {env.SYS_ID != '' && env.SYS_ID != null } }
-      steps {
-        script {
-          updateSNOWChange('', 'implement')
-          sleep(time: 5, unit: 'SECONDS')
-          getSNOWChangeTask('Implement')
-
-          def payload = """{
-            \"description\": \"Implementation triggered via Jenkins Pipeline -
-            ${env.JOB_BASE_NAME}:${env.BUILD_NUMBER}\"
-          }"""
-
-          updateSNOWChangeTask(payload, 'start')
-        }
-      }
-    }
-
     stage('Terraform Apply') {
       steps {
         sh '''
@@ -335,34 +220,6 @@ pipeline {
 
           echo "[Apply] Deployment successful"
         '''
-      }
-    }
-
-    stage('Post Implementation') {
-      agent { label 'dev' }
-      options { skipDefaultCheckout() }
-      when { expression {env.SYS_ID != '' && env.SYS_ID != null } }
-      steps {
-        script {
-          getSNOWChangeTask('Post%20implementation%20testing')
-
-          def payload = '''{
-               "description": "Post implementation triggered via Jenkins Pipeline - ''' + env.JOB_BASE_NAME + '''"
-          }'''
-          updateSNOWChangeTask(payload, 'start')
-
-          payload = """{
-            \"close_notes\": \"Post implementation completed successfully via Jenkins Pipeline -
-            ${env.JOB_BASE_NAME}:${env.BUILD_NUMBER}\"
-          }"""
-          updateSNOWChangeTask(payload, 'close')
-
-          payload = """{
-            \"close_notes\": \"Change completed successfully via Jenkins Pipeline -
-            ${env.JOB_BASE_NAME}:${env.BUILD_NUMBER}\"
-          }"""
-          updateSNOWChange(payload, 'close')
-        }
       }
     }
   }
