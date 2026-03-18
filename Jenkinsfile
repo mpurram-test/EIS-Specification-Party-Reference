@@ -87,13 +87,7 @@ pipeline {
           for %%f in (api\\* v*.yaml) do (
             if exist "%%f" (
               echo [Bundle] Processing %%f
-              for %%b in (%%~nxf) do set base=%%b
-              where docker >nul 2>nul
-              if %ERRORLEVEL% EQU 0 (
-                docker run --rm -v %CD%:/spec redocly/cli bundle "%%f" --ext yaml -o "build\\api-bundled\\%%~nxf"
-              ) else (
-                npx -y @redocly/cli@latest bundle "%%f" --ext yaml -o "build\\api-bundled\\%%~nxf"
-              )
+              npx -y @redocly/cli@latest bundle "%%f" --ext yaml -o "build\\api-bundled\\%%~nxf"
             )
           )
           echo [Bundle] Results:
@@ -108,12 +102,7 @@ pipeline {
           dir /b build\\api-bundled\\* v*.yaml > specs_list.txt
           for /f %%f in (specs_list.txt) do (
             echo [Lint] Running Redocly against %%f
-            where docker >nul 2>nul
-            if %ERRORLEVEL% EQU 0 (
-              docker run --rm -w /spec -v %CD%:/spec redocly/cli lint --config redocly.yaml --format json "build\\api-bundled\\%%f" >> redocly-report.json
-            ) else (
-              npx -y @redocly/cli@latest lint --config redocly.yaml --format json "build\\api-bundled\\%%f" >> redocly-report.json
-            )
+            npx -y @redocly/cli@latest lint --config redocly.yaml --format json "build\\api-bundled\\%%f" >> redocly-report.json
           )
           del specs_list.txt
         '''
