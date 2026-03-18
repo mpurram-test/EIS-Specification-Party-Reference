@@ -28,13 +28,13 @@ pipeline {
   environment {
     ARM_USERNAME = credentials('azure-username')
     ARM_PASSWORD = credentials('azure-password')
+    ARM_TENANT_ID = '220fb4d0-cb02-4bc9-8d8a-8f85cf1c9161'
+    ARM_SUBSCRIPTION_ID = '5c617d29-4760-465d-8453-3dca268072eb'
     TF_INPUT                  = 'false'
     TF_IN_AUTOMATION          = 'true'
     TF_DIR                    = 'terraform'
     RESOURCE_GROUP_NAME_CRED  = 'rg-apim-demo'
     APIM_NAME_CRED            = 'my--party-apim-demo'
-    ARM_SUBSCRIPTION_ID        = '5c617d29-4760-465d-8453-3dca268072eb'
-    ARM_TENANT_ID              = '220fb4d0-cb02-4bc9-8d8a-8f85cf1c9161'
   }
   // groovylint-enable GStringExpressionWithinString
 
