@@ -33,7 +33,8 @@ pipeline {
     APIM_NAME_CRED            = 'my--party-apim-demo'
     ARM_SUBSCRIPTION_ID        = '5c617d29-4760-465d-8453-3dca268072eb'
     ARM_CLIENT_ID              = '01cbbbbc-b507-438b-adcd-ba1910d72cec'
-    ARM_CLIENT_SECRET          = 'C2f8Q~qWaN_K8YvHluLARK.DFmUzeLNZF4qSfaAX'
+    // ARM_CLIENT_SECRET is now injected from Jenkins credentials
+    ARM_CLIENT_SECRET = credentials('ARM_CLIENT_SECRET')
     ARM_TENANT_ID              = '220fb4d0-cb02-4bc9-8d8a-8f85cf1c9161'
   }
   // groovylint-enable GStringExpressionWithinString
@@ -142,7 +143,7 @@ pipeline {
       }
       post {
         always {
-          archiveArtifacts artifacts: "%TF_DIR%/tfplan.out", fingerprint: true, allowEmptyArchive: false
+          archiveArtifacts artifacts: '%TF_DIR%/tfplan.out', fingerprint: true, allowEmptyArchive: false
         }
       }
     }
