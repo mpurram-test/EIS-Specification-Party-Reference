@@ -1,6 +1,6 @@
 /* groovylint-disable CompileStatic, GStringExpressionWithinString, LineLength, NestedBlockDepth, DuplicateListLiteral, DuplicateStringLiteral, DuplicateNumberLiteral, NoDef, VariableTypeRequired, UnnecessaryGetter, Instanceof */
 pipeline {
-  agent { label 'dev' }
+  agent any
 
   parameters {
     choice(name: 'ENV', choices: ['stage', 'prod'], description: 'Target environment')
