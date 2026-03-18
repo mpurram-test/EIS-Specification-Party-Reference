@@ -62,9 +62,7 @@ pipeline {
       steps {
         script {
           env.TF_ENV = params.ENV?.trim() ?: (env.BRANCH_NAME == 'main' ? 'prod' : 'stage')
-          env.BACKEND_TFVARS = "backend-${env.TF_ENV}.tfvars"
           echo "Selected ENV: ${env.TF_ENV}"
-          echo "Backend config file: ${env.BACKEND_TFVARS}"
           echo "Change management enabled: ${env.TF_ENV == 'prod'}"
         }
       }
@@ -131,7 +129,7 @@ pipeline {
       steps {
         bat '''
           echo [Init] Using TF_DIR=%TF_DIR%
-          terraform -chdir="%TF_DIR%" init -reconfigure -backend-config="%BACKEND_TFVARS%" -input=false -no-color
+          terraform -chdir="%TF_DIR%" init -reconfigure -input=false -no-color
           terraform -chdir="%TF_DIR%" fmt -check -diff -recursive -no-color
           if %ERRORLEVEL% NEQ 0 (
             echo [Terraform] fmt issues detected
