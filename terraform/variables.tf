@@ -1,7 +1,3 @@
-variable "ARM_CLIENT_SECRET" {
-  description = "Azure client secret for authentication. Injected via Jenkins credentials."
-  type        = string
-}
 variable "resource_group_name" { type = string }
 variable "api_management_name" { type = string }
 variable "fail_if_no_specs" {
