@@ -1,9 +1,21 @@
-/* groovylint-disable CompileStatic, GStringExpressionWithinString */
+/* groovylint-disable CompileStatic, GStringExpressionWithinString, LineLength, NestedBlockDepth, DuplicateListLiteral, DuplicateStringLiteral, DuplicateNumberLiteral, NoDef, VariableTypeRequired, UnnecessaryGetter, Instanceof */
 pipeline {
   agent { label 'dev' }
 
   parameters {
     choice(name: 'ENV', choices: ['stage', 'prod'], description: 'Target environment')
+    choice(name: 'CreateCAB', choices: ['No', 'Yes'], description: 'Create a new ServiceNow change request')
+    choice(
+      name: 'ChangeType',
+      choices: ['normal', 'expedited', 'emergency'],
+      description: 'ServiceNow change type when creating a new ticket'
+    )
+    string(name: 'Change', defaultValue: '', description: 'Existing ServiceNow change ticket ID (example: CHG000123)')
+    string(
+      name: 'SNOW_SERVICE_NAME',
+      defaultValue: 'APIM-Party-Reference',
+      description: 'Service name passed to createSNOWChange'
+    )
   }
 
   options {
@@ -56,6 +68,7 @@ pipeline {
           env.BACKEND_TFVARS = "backend-${env.TF_ENV}.tfvars"
           echo "Selected ENV: ${env.TF_ENV}"
           echo "Backend config file: ${env.BACKEND_TFVARS}"
+          echo "Change management enabled: ${env.TF_ENV == 'prod'}"
         }
       }
     }
@@ -70,6 +83,56 @@ pipeline {
           echo ""
           echo "API dir:" && ls -la api || true
         '''
+      }
+    }
+
+    stage('Change Information') {
+      parallel {
+        stage('Get Existing Change Ticket') {
+          agent none
+          options { skipDefaultCheckout() }
+          when { expression { params.CreateCAB != 'Yes' && params.Change?.trim() } }
+          steps {
+            script {
+              getSNOWChange(params.Change)
+            }
+          }
+        }
+        stage('Create Change Request') {
+          agent none
+          options { skipDefaultCheckout() }
+          when { expression { params.CreateCAB == 'Yes' } }
+          steps {
+            script {
+              createSNOWChange(params.SNOW_SERVICE_NAME, params.ChangeType)
+            }
+          }
+        }
+      }
+    }
+
+    stage('Update Change Ticket') {
+      agent none
+      options { skipDefaultCheckout() }
+      when { expression { env.SYS_ID != '' && env.SYS_ID != null } }
+      steps {
+        script {
+          def changeLogDesc = getSCMChanges()
+
+          def prevChangeLogDesc = ''
+          def prevChanges = (env.CHANGE_DESC ?: '').split('\\n')
+          for (int j = 0; j < prevChanges.length; j++) {
+            if (prevChanges[j] != '\\n') {
+              prevChangeLogDesc = prevChangeLogDesc + prevChanges[j] + '\\n'
+            }
+          }
+
+          def payload = '''{
+               "description": "''' + prevChangeLogDesc + changeLogDesc + '''"
+          }'''
+
+          updateSNOWChange(payload, 'updateDesc')
+        }
       }
     }
 
@@ -108,62 +171,74 @@ pipeline {
       }
     }
 
-    // stage('Redocly Lint (bundled)') {
-    //   steps {
-    //     script {
+    stage('Bundle validation (Redocly)') {
+      steps {
+        sh '''
+          #!/usr/bin/env bash
+          set -euo pipefail
 
-    //       // STEP 1 — verify files exist
-    //       if (sh(script: 'ls build/api-bundled/*\\ v*.yaml >/dev/null 2>&1', returnStatus: true) != 0) {
-    //         error "No bundled specs found. Aborting."
-    //       }
+          SPECS_LIST_FILE="$(mktemp)"
+          find build/api-bundled -maxdepth 1 -type f -name "* v*.yaml" -print0 > "${SPECS_LIST_FILE}"
 
-    //       // STEP 2 — safe file list
-    //       def files = sh(script: 'ls build/api-bundled/*\\ v*.yaml', returnStdout: true)
-    //                     .trim().split('\\r?\\n')
+          if [ ! -s "${SPECS_LIST_FILE}" ]; then
+            echo "ERROR: No bundled specs found in build/api-bundled"
+            exit 1
+          fi
 
-    //       // STEP 3 — quote filenames (because they contain spaces)
-    //       def filesQuoted = files.collect { "\"${it}\"" }.join(' ')
+          count=$(xargs -0 -n1 printf '%s\n' < "${SPECS_LIST_FILE}" | wc -l | xargs)
+          echo "[Lint] Running Redocly against ${count} bundled spec(s)"
 
-    //       // STEP 4 — choose Redocly runner
-    //       def hasDocker = (sh(script: 'command -v docker >/dev/null 2>&1', returnStatus: true) == 0)
+          if command -v docker >/dev/null 2>&1; then
+            xargs -0 docker run --rm -w /spec -v "$PWD":/spec redocly/cli \
+              lint --config redocly.yaml --format json < "${SPECS_LIST_FILE}" \
+              | tee redocly-report.json
+          else
+            xargs -0 npx -y @redocly/cli@latest \
+              lint --config redocly.yaml --format json < "${SPECS_LIST_FILE}" \
+              | tee redocly-report.json
+          fi
 
-    //       def lintCmdDocker = """
-    //         docker run --rm -w /spec -v "$PWD":/spec redocly/cli \
-    //         lint --format json ${filesQuoted} \
-    //         | tee redocly-report.json
-    //       """
+          rm -f "${SPECS_LIST_FILE}"
+        '''
+      }
+      post {
+        always {
+          archiveArtifacts artifacts: 'redocly-report.json', allowEmptyArchive: true
+        }
+      }
+    }
 
-    //       def lintCmdNPX = """
-    //         npx -y @redocly/cli@latest \
-    //         lint --config redocly.yaml --format json ${filesQuoted} \
-    //         | tee redocly-report.json
-    //       """
 
-    //       // STEP 5 — run lint
-    //       def exitCode = sh(script: hasDocker ? lintCmdDocker : lintCmdNPX,
-    //                         returnStatus: true)
-
-    //       // STEP 6 — print by-rule summary
-    //       def text = readFile('redocly-report.json')
-    //       def json = new groovy.json.JsonSlurper().parseText(text)
-    //       def reports = (json instanceof List) ? json : [json]
-    //       def problems = reports.collectMany { it.problems ?: [] }
-    //       def byRule = problems.groupBy { it.ruleId ?: it.rule }
-    //                            .collectEntries { rule, list -> [(rule ?: 'unknown'): list.size()] }
-
-    //       echo "========= Redocly Summary ========="
-    //       echo byRule.sort { -it.value }.toString()
-    //       echo "=================================="
-
-    //       // STEP 7 — archive + fail only on real errors
-    //       archiveArtifacts artifacts: 'redocly-report.json', allowEmptyArchive: false
-
-    //       if (exitCode != 0) {
-    //         error "Redocly lint failed. See redocly-report.json."
-    //       }
-    //     }
-    //   }
-    // }
+    stage('Production Gate') {
+      agent none
+      options { skipDefaultCheckout() }
+      when { expression { env.TF_ENV == 'prod' } }
+      steps {
+        timeout(time: 10, unit: 'MINUTES') {
+          script {
+            if (env.CHANGE_STATE == '' || env.CHANGE_STATE == null || env.CHANGE_STATE.toInteger() < -2) {
+              def approvalMap = input id: 'prod_gate',
+                message: 'Change request not found or not approved by CAB',
+                parameters: [
+                text(description: 'Approved ServiceNow change ID.', name: 'ChangeRequest'),
+                choice(
+                  description: 'Type of change being pushed.',
+                  choices: 'CAB Approved\nEmergency',
+                  name: 'ChangeApprovalType'
+                )
+              ], ok: 'Proceed?', submitter: 'authenticated', submitterParameter: 'APPROVER'
+              env.PROD_APPROVER = approvalMap['APPROVER']
+              env.CHANGE_TYPE = approvalMap['ChangeApprovalType']
+              env.CHANGE_ID = approvalMap['ChangeRequest']
+            } else {
+              env.PROD_APPROVER = env.BUILD_USER ?: 'jenkins'
+              env.CHANGE_TYPE = 'CAB Approved'
+              env.CHANGE_ID = params.Change
+            }
+          }
+        }
+      }
+    }
 
     stage('Terraform Init/Validate') {
       steps {
@@ -214,6 +289,26 @@ pipeline {
       }
     }
 
+    stage('Start Implementation') {
+      agent { label 'dev' }
+      options { skipDefaultCheckout() }
+      when { expression { env.SYS_ID != '' && env.SYS_ID != null } }
+      steps {
+        script {
+          updateSNOWChange('', 'implement')
+          sleep(time: 5, unit: 'SECONDS')
+          getSNOWChangeTask('Implement')
+
+          def payload = """{
+            \"description\": \"Implementation triggered via Jenkins Pipeline -
+            ${env.JOB_BASE_NAME}:${env.BUILD_NUMBER}\"
+          }"""
+
+          updateSNOWChangeTask(payload, 'start')
+        }
+      }
+    }
+
     stage('Terraform Apply') {
       steps {
         sh '''
@@ -240,6 +335,34 @@ pipeline {
 
           echo "[Apply] Deployment successful"
         '''
+      }
+    }
+
+    stage('Post Implementation') {
+      agent { label 'dev' }
+      options { skipDefaultCheckout() }
+      when { expression { env.SYS_ID != '' && env.SYS_ID != null } }
+      steps {
+        script {
+          getSNOWChangeTask('Post%20implementation%20testing')
+
+          def payload = '''{
+               "description": "Post implementation triggered via Jenkins Pipeline - ''' + env.JOB_BASE_NAME + '''"
+          }'''
+          updateSNOWChangeTask(payload, 'start')
+
+          payload = """{
+            \"close_notes\": \"Post implementation completed successfully via Jenkins Pipeline -
+            ${env.JOB_BASE_NAME}:${env.BUILD_NUMBER}\"
+          }"""
+          updateSNOWChangeTask(payload, 'close')
+
+          payload = """{
+            \"close_notes\": \"Change completed successfully via Jenkins Pipeline -
+            ${env.JOB_BASE_NAME}:${env.BUILD_NUMBER}\"
+          }"""
+          updateSNOWChange(payload, 'close')
+        }
       }
     }
   }
