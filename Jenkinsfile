@@ -41,22 +41,19 @@ pipeline {
   stages {
     stage('Preflight: Tooling') {
       steps {
-        sh '''
-          #!/usr/bin/env bash
-          set -e
-          echo "[Preflight] Checking required tools..."
-
-          if ! command -v docker >/dev/null 2>&1 && ! command -v node >/dev/null 2>&1; then
-            echo "ERROR: Need Docker or Node to run Redocly CLI."
-            exit 1
-          fi
-
-          if ! command -v terraform >/dev/null 2>&1; then
-            echo "ERROR: Terraform not installed."
-            exit 1
-          fi
-
-          echo "[Preflight] OK"
+        bat '''
+          echo [Preflight] Checking required tools...
+          where docker >nul 2>nul || where node >nul 2>nul
+          if %ERRORLEVEL% NEQ 0 (
+            echo ERROR: Need Docker or Node to run Redocly CLI.
+            exit /b 1
+          )
+          where terraform >nul 2>nul
+          if %ERRORLEVEL% NEQ 0 (
+            echo ERROR: Terraform not installed.
+            exit /b 1
+          )
+          echo [Preflight] OK
         '''
       }
     }
@@ -76,78 +73,51 @@ pipeline {
     stage('Checkout') {
       steps {
         checkout scm
-        sh '''
-          #!/usr/bin/env bash
-          set -e
-          echo "Repo root:" && ls -la
-          echo ""
-          echo "API dir:" && ls -la api || true
+        bat '''
+          echo Repo root:
+          dir
+          echo.
+          echo API dir:
+          if exist api dir api
         '''
       }
     }
     stage('Bundle OpenAPI (multi-API)') {
       steps {
-        sh '''
-          #!/usr/bin/env bash
-          set -e
-
-          mkdir -p build/api-bundled
-
-          # Bundle only files like "My API v1.yaml" (space ' v' then version)
-          for f in api/*\\ v*.yaml; do
-            [ -f "$f" ] || continue
-
-            base="$(basename "$f")"
-            echo "[Bundle] Processing $f"
-
-            if command -v docker >/dev/null 2>&1; then
-              docker run --rm -v "$PWD":/spec redocly/cli \
-                bundle "$f" --ext yaml -o "build/api-bundled/$base"
-            else
-              npx -y @redocly/cli@latest \
-                bundle "$f" --ext yaml -o "build/api-bundled/$base"
-            fi
-          done
-          # Best effort only: some agents/containers do not allow chown.
-          if command -v chown >/dev/null 2>&1 && chown -R jenkins:jenkins build/ 2>/dev/null; then
-            echo "[Bundle] Ownership updated to jenkins:jenkins"
-          else
-            echo "[Bundle] Skipping chown (not supported/allowed on this agent)"
-          fi
-          echo "[Bundle] Results:"
-          ls -la build/api-bundled
+        bat '''
+          if not exist build\api-bundled mkdir build\api-bundled
+          for %%f in (api\* v*.yaml) do (
+            if exist "%%f" (
+              echo [Bundle] Processing %%f
+              for %%b in (%%~nxf) do set base=%%b
+              where docker >nul 2>nul
+              if %ERRORLEVEL% EQU 0 (
+                docker run --rm -v %CD%:/spec redocly/cli bundle "%%f" --ext yaml -o "build/api-bundled/%%~nxf"
+              ) else (
+                npx -y @redocly/cli@latest bundle "%%f" --ext yaml -o "build/api-bundled/%%~nxf"
+              )
+            )
+          )
+          echo [Bundle] Results:
+          dir build\api-bundled
         '''
       }
     }
 
     stage('Bundle validation (Redocly)') {
       steps {
-        sh '''
-          #!/usr/bin/env bash
-          set -euo pipefail
-
-          SPECS_LIST_FILE="$(mktemp)"
-          find build/api-bundled -maxdepth 1 -type f -name "* v*.yaml" -print0 > "${SPECS_LIST_FILE}"
-
-          if [ ! -s "${SPECS_LIST_FILE}" ]; then
-            echo "ERROR: No bundled specs found in build/api-bundled"
-            exit 1
-          fi
-
-          count=$(xargs -0 -n1 printf '%s\n' < "${SPECS_LIST_FILE}" | wc -l | xargs)
-          echo "[Lint] Running Redocly against ${count} bundled spec(s)"
-
-          if command -v docker >/dev/null 2>&1; then
-            xargs -0 docker run --rm -w /spec -v "$PWD":/spec redocly/cli \
-              lint --config redocly.yaml --format json < "${SPECS_LIST_FILE}" \
-              | tee redocly-report.json
-          else
-            xargs -0 npx -y @redocly/cli@latest \
-              lint --config redocly.yaml --format json < "${SPECS_LIST_FILE}" \
-              | tee redocly-report.json
-          fi
-
-          rm -f "${SPECS_LIST_FILE}"
+        bat '''
+          dir /b build\api-bundled\* v*.yaml > specs_list.txt
+          for /f %%f in (specs_list.txt) do (
+            echo [Lint] Running Redocly against %%f
+            where docker >nul 2>nul
+            if %ERRORLEVEL% EQU 0 (
+              docker run --rm -w /spec -v %CD%:/spec redocly/cli lint --config redocly.yaml --format json "build/api-bundled/%%f" >> redocly-report.json
+            ) else (
+              npx -y @redocly/cli@latest lint --config redocly.yaml --format json "build/api-bundled/%%f" >> redocly-report.json
+            )
+          )
+          del specs_list.txt
         '''
       }
       post {
@@ -159,90 +129,70 @@ pipeline {
 
     stage('Terraform Init/Validate') {
       steps {
-        sh '''
-          set -e
-
-          echo "[Init] Using TF_DIR=${TF_DIR}"
-          terraform -chdir="${TF_DIR}" init -reconfigure -backend-config="${BACKEND_TFVARS}" -input=false -no-color
-
-          set +e
-          FMT_OUTPUT=$(terraform -chdir="${TF_DIR}" fmt -check -diff -recursive -no-color 2>&1)
-          FMT_STATUS=$?
-          set -e
-          if [ "${FMT_STATUS}" -ne 0 ]; then
-            echo "[Terraform] fmt issues detected:"
-            echo "${FMT_OUTPUT}"
-            exit ${FMT_STATUS}
-          fi
-
-          terraform -chdir="${TF_DIR}" validate -no-color
+        bat '''
+          echo [Init] Using TF_DIR=%TF_DIR%
+          terraform -chdir="%TF_DIR%" init -reconfigure -backend-config="%BACKEND_TFVARS%" -input=false -no-color
+          terraform -chdir="%TF_DIR%" fmt -check -diff -recursive -no-color
+          if %ERRORLEVEL% NEQ 0 (
+            echo [Terraform] fmt issues detected
+            exit /b %ERRORLEVEL%
+          )
+          terraform -chdir="%TF_DIR%" validate -no-color
         '''
       }
     }
 
     stage('Terraform Plan') {
       steps {
-        sh '''
-          #!/usr/bin/env bash
-          set -e
-
-          terraform -chdir="${TF_DIR}" plan -input=false -no-color \
-            -var="resource_group_name=${RESOURCE_GROUP_NAME_CRED}" \
-            -var="api_management_name=${APIM_NAME_CRED}" \
-            -out=tfplan.out
-
-          PLAN_FILE_PATH="${TF_DIR}/tfplan.out"
-          if [ ! -f "${PLAN_FILE_PATH}" ]; then
-            echo "ERROR: Plan command finished but plan file missing at ${PLAN_FILE_PATH}"
-            exit 1
-          fi
-          echo "[Plan] Plan file created at ${PLAN_FILE_PATH}"
+        bat '''
+          terraform -chdir="%TF_DIR%" plan -input=false -no-color -var="resource_group_name=%RESOURCE_GROUP_NAME_CRED%" -var="api_management_name=%APIM_NAME_CRED%" -out=tfplan.out
+          if not exist "%TF_DIR%\tfplan.out" (
+            echo ERROR: Plan command finished but plan file missing at %TF_DIR%\tfplan.out
+            exit /b 1
+          )
+          echo [Plan] Plan file created at %TF_DIR%\tfplan.out
         '''
       }
       post {
         always {
-          archiveArtifacts artifacts: "${TF_DIR}/tfplan.out", fingerprint: true, allowEmptyArchive: false
+          archiveArtifacts artifacts: "%TF_DIR%/tfplan.out", fingerprint: true, allowEmptyArchive: false
         }
       }
     }
 
     stage('Terraform Apply') {
       steps {
-        sh '''
-          #!/usr/bin/env bash
-          set -e
-
-          PLAN_FILE="tfplan.out"
-          PLAN_FILE_PATH="${TF_DIR}/${PLAN_FILE}"
-          echo "[Apply] Workspace: $(pwd)"
-          echo "[Apply] TF_DIR=${TF_DIR}"
-          echo "[Apply] Expecting plan at ${PLAN_FILE_PATH}"
-          if [ ! -f "${PLAN_FILE_PATH}" ]; then
-            echo "ERROR: Plan file not found at ${PLAN_FILE_PATH}"
-            ls -la "${TF_DIR}" || true
-            exit 1
-          fi
-
-          echo "[Apply] Applying plan..."
-          if ! terraform -chdir="${TF_DIR}" apply -input=false -no-color -auto-approve "${PLAN_FILE}"; then
-            echo "ERROR: Apply failed. Automatic targeted rollback is disabled by policy."
-            echo "Please perform controlled manual recovery using approved runbook."
-            exit 1
-          fi
-
-          echo "[Apply] Deployment successful"
+        bat '''
+          set PLAN_FILE=tfplan.out
+          set PLAN_FILE_PATH=%TF_DIR%\%PLAN_FILE%
+          echo [Apply] Workspace: %CD%
+          echo [Apply] TF_DIR=%TF_DIR%
+          echo [Apply] Expecting plan at %PLAN_FILE_PATH%
+          if not exist "%PLAN_FILE_PATH%" (
+            echo ERROR: Plan file not found at %PLAN_FILE_PATH%
+            dir %TF_DIR%
+            exit /b 1
+          )
+          echo [Apply] Applying plan...
+          terraform -chdir="%TF_DIR%" apply -input=false -no-color -auto-approve "%PLAN_FILE%"
+          if %ERRORLEVEL% NEQ 0 (
+            echo ERROR: Apply failed. Automatic targeted rollback is disabled by policy.
+            echo Please perform controlled manual recovery using approved runbook.
+            exit /b 1
+          )
+          echo [Apply] Deployment successful
         '''
       }
-      }
+    }
     }
 
   post {
     success { echo "Build succeeded. ${BUILD_URL}" }
     failure { echo "Build failed: ${BUILD_URL}" }
     always {
-      sh '''
-        find . -name "tfplan.out" -delete
-        echo "[Cleanup] Removed tfplan files"
+      bat '''
+        for /r %%f in (tfplan.out) do del "%%f"
+        echo [Cleanup] Removed tfplan files
       '''
     }
   }
