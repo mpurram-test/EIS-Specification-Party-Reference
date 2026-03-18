@@ -99,7 +99,7 @@ pipeline {
     stage('Bundle validation (Redocly)') {
       steps {
         bat '''
-          dir /b build\\api-bundled\\* v*.yaml > specs_list.txt
+          dir /b build\\api-bundled\\*.yaml > specs_list.txt
           for /f %%f in (specs_list.txt) do (
             echo [Lint] Running Redocly against %%f
             npx -y @redocly/cli@latest lint --config redocly.yaml --format json "build\\api-bundled\\%%f" >> redocly-report.json
